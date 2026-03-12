@@ -1,5 +1,34 @@
 const swaggerJsdoc = require('swagger-jsdoc');
 
+const getServers = () => {
+  const servers = [];
+  
+  // Production server (Render)
+  if (process.env.RENDER_EXTERNAL_URL) {
+    servers.push({
+      url: process.env.RENDER_EXTERNAL_URL,
+      description: 'Production server (Render)'
+    });
+  }
+  
+  // Custom production URL
+  if (process.env.API_URL) {
+    servers.push({
+      url: process.env.API_URL,
+      description: 'Production server'
+    });
+  }
+  
+  // Development server
+  const port = process.env.PORT || 5000;
+  servers.push({
+    url: `http://localhost:${port}`,
+    description: 'Development server'
+  });
+  
+  return servers;
+};
+
 const options = {
   definition: {
     openapi: '3.0.0',
@@ -12,12 +41,7 @@ const options = {
         email: 'support@aigraduation.com'
       }
     },
-    servers: [
-      {
-        url: 'http://localhost:5000',
-        description: 'Development server'
-      }
-    ],
+    servers: getServers(),
     components: {
       securitySchemes: {
         bearerAuth: {
@@ -34,7 +58,7 @@ const options = {
             id: { type: 'integer', example: 1 },
             email: { type: 'string', format: 'email', example: 'user@example.com' },
             fullName: { type: 'string', example: 'Nguyễn Văn A' },
-            role: { type: 'string', enum: ['student', 'teacher'], example: 'student' },
+            role: { type: 'string', enum: ['student', 'teacher', 'admin'], example: 'student' },
             className: { type: 'string', example: '12A1', nullable: true },
             createdAt: { type: 'string', format: 'date-time' }
           }
