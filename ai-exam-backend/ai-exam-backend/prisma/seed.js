@@ -66,19 +66,19 @@ async function main() {
   console.log('🌱 Bắt đầu seed dữ liệu...\n');
 
   for (const userData of defaultUsers) {
-    const existingUser = await prisma.user.findUnique({
-      where: { email: userData.email }
-    });
-
-    if (existingUser) {
-      console.log(`⏭️  User ${userData.email} đã tồn tại, bỏ qua.`);
-      continue;
-    }
-
     const passwordHash = await bcrypt.hash(userData.password, SALT_ROUNDS);
 
-    const user = await prisma.user.create({
-      data: {
+    const user = await prisma.user.upsert({
+      where: { email: userData.email },
+      update: {
+        passwordHash,
+        fullName: userData.fullName,
+        role: userData.role,
+        className: userData.className,
+        isActive: true,
+        deletedAt: null
+      },
+      create: {
         email: userData.email,
         passwordHash,
         fullName: userData.fullName,
@@ -88,8 +88,19 @@ async function main() {
       }
     });
 
-    console.log(`✅ Tạo ${userData.role}: ${user.email}`);
+    console.log(`✅ Upsert ${userData.role}: ${user.email} (ID: ${user.id})`);
   }
+
+  // Hiển thị tất cả users trong database
+  const allUsers = await prisma.user.findMany({
+    where: { deletedAt: null },
+    select: { id: true, email: true, fullName: true, role: true }
+  });
+  
+  console.log('\n📊 Danh sách users trong database:');
+  allUsers.forEach(u => {
+    console.log(`   ID: ${u.id} | ${u.role.padEnd(7)} | ${u.email}`);
+  });
 
   console.log('\n🎉 Seed dữ liệu hoàn tất!');
   console.log('\n📋 Thông tin đăng nhập mặc định:');
