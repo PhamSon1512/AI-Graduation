@@ -12,7 +12,6 @@ const getDatabaseUrl = () => {
       if (apiKey) {
         const decoded = JSON.parse(Buffer.from(apiKey, 'base64').toString('utf-8'));
         let dbUrl = decoded.databaseUrl;
-        // Fix IPv6 issue on Windows - force IPv4
         dbUrl = dbUrl.replace('localhost', '127.0.0.1');
         return dbUrl;
       }
@@ -21,19 +20,26 @@ const getDatabaseUrl = () => {
     }
   }
   
-  // Also fix for regular URLs
   return url ? url.replace('localhost', '127.0.0.1') : url;
 };
 
 const connectionString = getDatabaseUrl();
-console.log('📡 Database URL:', connectionString?.substring(0, 50) + '...');
+const isProduction = process.env.NODE_ENV === 'production';
 
-const pool = new Pool({ connectionString });
+console.log('📡 Database URL:', connectionString?.substring(0, 50) + '...');
+console.log('🌍 Environment:', process.env.NODE_ENV || 'development');
+
+const poolConfig = {
+  connectionString,
+  ssl: isProduction ? { rejectUnauthorized: false } : false
+};
+
+const pool = new Pool(poolConfig);
 const adapter = new PrismaPg(pool);
 
 const prisma = new PrismaClient({
   adapter,
-  log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+  log: isProduction ? ['error'] : ['error', 'warn'],
 });
 
 module.exports = prisma;

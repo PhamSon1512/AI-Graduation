@@ -26,7 +26,12 @@ const getDatabaseUrl = () => {
 };
 
 const connectionString = getDatabaseUrl();
-const pool = new Pool({ connectionString });
+const isProduction = process.env.NODE_ENV === 'production';
+
+const pool = new Pool({
+  connectionString,
+  ssl: isProduction ? { rejectUnauthorized: false } : false
+});
 const adapter = new PrismaPg(pool);
 
 const prisma = new PrismaClient({ adapter });

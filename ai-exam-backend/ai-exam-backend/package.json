@@ -6,9 +6,11 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js",
     "dev": "nodemon server.js",
+    "build": "npx prisma generate",
     "db:migrate": "npx prisma migrate deploy",
     "db:seed": "node prisma/seed.js",
-    "db:setup": "npm run db:migrate && npm run db:seed"
+    "db:setup": "npm run db:migrate && npm run db:seed",
+    "postinstall": "npx prisma generate"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
