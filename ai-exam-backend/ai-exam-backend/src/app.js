@@ -12,8 +12,35 @@ const adminUserRoutes = require('./routes/admin.user.routes');
 
 const app = express();
 
+// CORS Configuration
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5173',
+  'https://ai-graduation-fe.pages.dev',
+  process.env.FRONTEND_URL
+].filter(Boolean);
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, Postman, curl, etc.)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.log('Blocked by CORS:', origin);
+      callback(null, true); // Temporarily allow all for debugging
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+};
+
 // Middlewares cơ bản
-app.use(cors()); // Cho phép React gọi API
+app.use(cors(corsOptions));
 app.use(helmet({
   contentSecurityPolicy: false, // Tắt CSP để Swagger UI hoạt động
   crossOriginEmbedderPolicy: false
