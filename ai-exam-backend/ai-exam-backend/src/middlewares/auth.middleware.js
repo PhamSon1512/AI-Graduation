@@ -30,6 +30,8 @@ const authenticate = async (req, res, next) => {
         fullName: true,
         role: true,
         className: true,
+        isActive: true,
+        deletedAt: true,
         createdAt: true
       }
     });
@@ -38,6 +40,20 @@ const authenticate = async (req, res, next) => {
       return res.status(401).json({
         status: 'error',
         message: 'Người dùng không tồn tại.'
+      });
+    }
+
+    if (user.deletedAt) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Tài khoản đã bị xóa.'
+      });
+    }
+
+    if (!user.isActive) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.'
       });
     }
 
@@ -74,10 +90,12 @@ const authorizeRoles = (...roles) => {
 
 const isTeacher = authorizeRoles('teacher');
 const isStudent = authorizeRoles('student');
+const isAdmin = authorizeRoles('admin');
 
 module.exports = {
   authenticate,
   authorizeRoles,
   isTeacher,
-  isStudent
+  isStudent,
+  isAdmin
 };

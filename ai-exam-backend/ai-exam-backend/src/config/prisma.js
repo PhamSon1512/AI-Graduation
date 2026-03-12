@@ -11,17 +11,23 @@ const getDatabaseUrl = () => {
       const apiKey = urlObj.searchParams.get('api_key');
       if (apiKey) {
         const decoded = JSON.parse(Buffer.from(apiKey, 'base64').toString('utf-8'));
-        return decoded.databaseUrl;
+        let dbUrl = decoded.databaseUrl;
+        // Fix IPv6 issue on Windows - force IPv4
+        dbUrl = dbUrl.replace('localhost', '127.0.0.1');
+        return dbUrl;
       }
     } catch (e) {
       console.error('Failed to decode Prisma Postgres URL:', e.message);
     }
   }
   
-  return url;
+  // Also fix for regular URLs
+  return url ? url.replace('localhost', '127.0.0.1') : url;
 };
 
 const connectionString = getDatabaseUrl();
+console.log('📡 Database URL:', connectionString?.substring(0, 50) + '...');
+
 const pool = new Pool({ connectionString });
 const adapter = new PrismaPg(pool);
 

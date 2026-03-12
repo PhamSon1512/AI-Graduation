@@ -7,6 +7,8 @@ const swaggerSpec = require('./config/swagger');
 
 // Import routes
 const authRoutes = require('./routes/auth.routes');
+const questionRoutes = require('./routes/question.routes');
+const adminUserRoutes = require('./routes/admin.user.routes');
 
 const app = express();
 
@@ -63,10 +65,11 @@ app.get('/api/health', (req, res) => {
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/questions', questionRoutes);
+app.use('/api/admin/users', adminUserRoutes);
 
 // Nơi đăng ký các Routes sau này
 // app.use('/api/exams', examRoutes);
-// app.use('/api/ai', aiRoutes);
 
 // Xử lý Route không tồn tại
 app.use((req, res, next) => {

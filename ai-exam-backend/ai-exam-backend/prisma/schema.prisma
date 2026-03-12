@@ -10,6 +10,7 @@ datasource db {
 enum UserRole {
   student
   teacher
+  admin
 }
 
 enum BloomLevel {
@@ -25,7 +26,7 @@ enum AiStatus {
   rejected
 }
 
-// Users table (Teachers & Students)
+// Users table (Teachers & Students & Admin)
 model User {
   id            Int       @id @default(autoincrement())
   fullName      String    @map("full_name") @db.VarChar(100)
@@ -33,7 +34,10 @@ model User {
   passwordHash  String    @map("password_hash") @db.VarChar(255)
   role          UserRole
   className     String?   @map("class_name") @db.VarChar(50)
+  isActive      Boolean   @default(true) @map("is_active")
   createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
 
   // Password reset fields
   resetToken        String?   @map("reset_token") @db.VarChar(255)
@@ -44,6 +48,7 @@ model User {
 
   // Relations
   createdExams            Exam[]              @relation("ExamCreator")
+  createdQuestions        Question[]          @relation("QuestionCreator")
   studentExamResults      StudentExamResult[] @relation("StudentResults")
   teacherSuggestions      AiSuggestion[]      @relation("TeacherSuggestions")
   studentSuggestions      AiSuggestion[]      @relation("StudentSuggestions")
@@ -55,13 +60,19 @@ model User {
 model Question {
   id              Int         @id @default(autoincrement())
   contentHtml     String      @map("content_html") @db.Text
+  options         Json?       @map("options")
   topic           String      @db.VarChar(100)
+  subject         String      @default("vat_ly_12") @db.VarChar(50)
   bloomLevel      BloomLevel  @map("bloom_level")
-  correctAnswer   String      @map("correct_answer") @db.Char(1)
+  correctAnswer   String?     @map("correct_answer") @db.Char(1)
   explanationHtml String?     @map("explanation_html") @db.Text
+  isAiGenerated   Boolean     @default(false) @map("is_ai_generated")
+  createdById     Int?        @map("created_by")
   createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
 
   // Relations
+  createdBy             User?       @relation("QuestionCreator", fields: [createdById], references: [id], onDelete: SetNull)
   examQuestions         ExamQuestion[]
   studentQuestionLogs   StudentQuestionLog[]
 
