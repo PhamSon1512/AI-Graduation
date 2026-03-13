@@ -52,6 +52,8 @@ model User {
   studentExamResults      StudentExamResult[] @relation("StudentResults")
   teacherSuggestions      AiSuggestion[]      @relation("TeacherSuggestions")
   studentSuggestions      AiSuggestion[]      @relation("StudentSuggestions")
+  teacherSubjects         TeacherSubject[]    @relation("TeacherSubjects")
+  studentSubjects         StudentSubject[]    @relation("StudentSubjects")
 
   @@map("users")
 }
@@ -139,6 +141,53 @@ model StudentQuestionLog {
   question  Question          @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   @@map("student_question_logs")
+}
+
+// Subjects table (môn học)
+model Subject {
+  id          Int       @id @default(autoincrement())
+  code        String    @unique @db.VarChar(20)
+  name        String    @db.VarChar(100)
+  description String?   @db.Text
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  teacherSubjects TeacherSubject[]
+  studentSubjects StudentSubject[]
+
+  @@map("subjects")
+}
+
+// Teacher-Subject junction table (Giáo viên đăng ký môn dạy)
+model TeacherSubject {
+  id          Int       @id @default(autoincrement())
+  teacherId   Int       @map("teacher_id")
+  subjectId   Int       @map("subject_id")
+  assignedAt  DateTime  @default(now()) @map("assigned_at")
+
+  // Relations
+  teacher User    @relation("TeacherSubjects", fields: [teacherId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([teacherId, subjectId])
+  @@map("teacher_subjects")
+}
+
+// Student-Subject junction table (Học sinh chọn môn học)
+model StudentSubject {
+  id          Int       @id @default(autoincrement())
+  studentId   Int       @map("student_id")
+  subjectId   Int       @map("subject_id")
+  enrolledAt  DateTime  @default(now()) @map("enrolled_at")
+
+  // Relations
+  student User    @relation("StudentSubjects", fields: [studentId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, subjectId])
+  @@map("student_subjects")
 }
 
 // AI suggestions table (Human in the loop feature)

@@ -62,6 +62,34 @@ const defaultUsers = [
   }
 ];
 
+const defaultSubjects = [
+  {
+    code: 'PHYS12',
+    name: 'Vật Lý 12',
+    description: 'Môn Vật Lý lớp 12 - Chương trình THPT'
+  },
+  {
+    code: 'CHEM12',
+    name: 'Hóa Học 12',
+    description: 'Môn Hóa Học lớp 12 - Chương trình THPT'
+  },
+  {
+    code: 'MATH12',
+    name: 'Toán 12',
+    description: 'Môn Toán lớp 12 - Chương trình THPT'
+  },
+  {
+    code: 'BIO12',
+    name: 'Sinh Học 12',
+    description: 'Môn Sinh Học lớp 12 - Chương trình THPT'
+  },
+  {
+    code: 'ENG12',
+    name: 'Tiếng Anh 12',
+    description: 'Môn Tiếng Anh lớp 12 - Chương trình THPT'
+  }
+];
+
 async function main() {
   console.log('🌱 Bắt đầu seed dữ liệu...\n');
 
@@ -100,6 +128,36 @@ async function main() {
   console.log('\n📊 Danh sách users trong database:');
   allUsers.forEach(u => {
     console.log(`   ID: ${u.id} | ${u.role.padEnd(7)} | ${u.email}`);
+  });
+
+  // Seed subjects
+  console.log('\n📚 Seed môn học...');
+  for (const subjectData of defaultSubjects) {
+    const subject = await prisma.subject.upsert({
+      where: { code: subjectData.code },
+      update: {
+        name: subjectData.name,
+        description: subjectData.description,
+        isActive: true
+      },
+      create: {
+        code: subjectData.code,
+        name: subjectData.name,
+        description: subjectData.description,
+        isActive: true
+      }
+    });
+    console.log(`✅ Upsert subject: ${subject.code} - ${subject.name}`);
+  }
+
+  // Hiển thị tất cả subjects
+  const allSubjects = await prisma.subject.findMany({
+    select: { id: true, code: true, name: true, isActive: true }
+  });
+  
+  console.log('\n📊 Danh sách môn học trong database:');
+  allSubjects.forEach(s => {
+    console.log(`   ID: ${s.id} | ${s.code.padEnd(8)} | ${s.name} | ${s.isActive ? 'Active' : 'Hidden'}`);
   });
 
   console.log('\n🎉 Seed dữ liệu hoàn tất!');

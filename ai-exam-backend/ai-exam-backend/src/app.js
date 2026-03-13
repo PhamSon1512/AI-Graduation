@@ -9,6 +9,7 @@ const swaggerSpec = require('./config/swagger');
 const authRoutes = require('./routes/auth.routes');
 const questionRoutes = require('./routes/question.routes');
 const adminUserRoutes = require('./routes/admin.user.routes');
+const subjectRoutes = require('./routes/subject.routes');
 
 const app = express();
 
@@ -94,6 +95,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/questions', questionRoutes);
 app.use('/api/admin/users', adminUserRoutes);
+app.use('/api', subjectRoutes); // Subject routes: /api/subjects, /api/teachers/:id/subjects, /api/students/:id/subjects
 
 // Nơi đăng ký các Routes sau này
 // app.use('/api/exams', examRoutes);
