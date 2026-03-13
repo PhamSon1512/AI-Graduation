@@ -10,6 +10,8 @@ const authRoutes = require('./routes/auth.routes');
 const questionRoutes = require('./routes/question.routes');
 const adminUserRoutes = require('./routes/admin.user.routes');
 const subjectRoutes = require('./routes/subject.routes');
+const examRoutes = require('./routes/exam.routes');
+const adminExamRoutes = require('./routes/admin.exam.routes');
 
 const app = express();
 
@@ -95,10 +97,9 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/questions', questionRoutes);
 app.use('/api/admin/users', adminUserRoutes);
-app.use('/api', subjectRoutes); // Subject routes: /api/subjects, /api/teachers/:id/subjects, /api/students/:id/subjects
-
-// Nơi đăng ký các Routes sau này
-// app.use('/api/exams', examRoutes);
+app.use('/api', subjectRoutes);
+app.use('/api/exams', examRoutes);
+app.use('/api/admin/exams', adminExamRoutes);
 
 // Xử lý Route không tồn tại
 app.use((req, res, next) => {

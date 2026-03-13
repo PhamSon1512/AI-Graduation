@@ -26,6 +26,31 @@ enum AiStatus {
   rejected
 }
 
+enum ExamStatus {
+  draft
+  pending
+  approved
+  rejected
+}
+
+enum QuestionType {
+  trac_nghiem
+  tu_luan
+}
+
+enum QuestionStatus {
+  draft
+  pending
+  approved
+}
+
+enum OcrSessionStatus {
+  processing
+  pending_review
+  saved
+  cancelled
+}
+
 // Users table (Teachers & Students & Admin)
 model User {
   id            Int       @id @default(autoincrement())
@@ -48,32 +73,43 @@ model User {
 
   // Relations
   createdExams            Exam[]              @relation("ExamCreator")
+  approvedExams           Exam[]              @relation("ExamApprover")
   createdQuestions        Question[]          @relation("QuestionCreator")
   studentExamResults      StudentExamResult[] @relation("StudentResults")
   teacherSuggestions      AiSuggestion[]      @relation("TeacherSuggestions")
   studentSuggestions      AiSuggestion[]      @relation("StudentSuggestions")
   teacherSubjects         TeacherSubject[]    @relation("TeacherSubjects")
   studentSubjects         StudentSubject[]    @relation("StudentSubjects")
+  ocrSessions             OcrSession[]        @relation("TeacherOcrSessions")
 
   @@map("users")
 }
 
 // Questions bank table
 model Question {
-  id              Int         @id @default(autoincrement())
-  contentHtml     String      @map("content_html") @db.Text
-  options         Json?       @map("options")
-  topic           String      @db.VarChar(100)
-  subject         String      @default("vat_ly_12") @db.VarChar(50)
-  bloomLevel      BloomLevel  @map("bloom_level")
-  correctAnswer   String?     @map("correct_answer") @db.Char(1)
-  explanationHtml String?     @map("explanation_html") @db.Text
-  isAiGenerated   Boolean     @default(false) @map("is_ai_generated")
-  createdById     Int?        @map("created_by")
-  createdAt       DateTime    @default(now()) @map("created_at")
-  updatedAt       DateTime    @updatedAt @map("updated_at")
+  id                Int             @id @default(autoincrement())
+  examId            Int             @map("exam_id")
+  orderNumber       Int             @default(0) @map("order_number")
+  contentHtml       String          @map("content_html") @db.Text
+  options           Json?           @map("options")
+  questionType      QuestionType    @default(trac_nghiem) @map("question_type")
+  topic             String          @db.VarChar(100)
+  subjectId         Int             @map("subject_id")
+  bloomLevel        BloomLevel      @map("bloom_level")
+  correctAnswer     String?         @map("correct_answer") @db.VarChar(10)
+  explanationHtml   String?         @map("explanation_html") @db.Text
+  hasImage          Boolean         @default(false) @map("has_image")
+  imageUrl          String?         @map("image_url") @db.VarChar(500)
+  imageDescription  String?         @map("image_description") @db.Text
+  isAiGenerated     Boolean         @default(false) @map("is_ai_generated")
+  status            QuestionStatus  @default(draft)
+  createdById       Int?            @map("created_by")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
 
   // Relations
+  exam                  Exam        @relation("ExamQuestions", fields: [examId], references: [id], onDelete: Cascade)
+  subject               Subject     @relation("SubjectQuestions", fields: [subjectId], references: [id])
   createdBy             User?       @relation("QuestionCreator", fields: [createdById], references: [id], onDelete: SetNull)
   examQuestions         ExamQuestion[]
   studentQuestionLogs   StudentQuestionLog[]
@@ -83,17 +119,30 @@ model Question {
 
 // Exams table
 model Exam {
-  id              Int       @id @default(autoincrement())
-  title           String    @db.VarChar(200)
-  isAiGenerated   Boolean   @default(false) @map("is_ai_generated")
-  createdById     Int?      @map("created_by")
-  durationMinutes Int       @default(45) @map("duration_minutes")
-  createdAt       DateTime  @default(now()) @map("created_at")
+  id              Int         @id @default(autoincrement())
+  code            String      @unique @db.VarChar(50)
+  title           String      @db.VarChar(200)
+  description     String?     @db.Text
+  subjectId       Int         @map("subject_id")
+  totalQuestions  Int         @default(0) @map("total_questions")
+  durationMinutes Int         @default(45) @map("duration_minutes")
+  isAiGenerated   Boolean     @default(false) @map("is_ai_generated")
+  status          ExamStatus  @default(draft)
+  createdById     Int?        @map("created_by")
+  approvedById    Int?        @map("approved_by")
+  approvedAt      DateTime?   @map("approved_at")
+  rejectionReason String?     @map("rejection_reason") @db.Text
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
 
   // Relations
+  subject             Subject             @relation(fields: [subjectId], references: [id])
   createdBy           User?               @relation("ExamCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  approvedBy          User?               @relation("ExamApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  questions           Question[]          @relation("ExamQuestions")
   examQuestions       ExamQuestion[]
   studentExamResults  StudentExamResult[]
+  ocrSessions         OcrSession[]
 
   @@map("exams")
 }
@@ -149,6 +198,7 @@ model Subject {
   code        String    @unique @db.VarChar(20)
   name        String    @db.VarChar(100)
   description String?   @db.Text
+  topics      Json?     @map("topics")
   isActive    Boolean   @default(true) @map("is_active")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
@@ -156,8 +206,30 @@ model Subject {
   // Relations
   teacherSubjects TeacherSubject[]
   studentSubjects StudentSubject[]
+  exams           Exam[]
+  questions       Question[]       @relation("SubjectQuestions")
 
   @@map("subjects")
+}
+
+// OCR Session table (phiên OCR tạm để teacher duyệt)
+model OcrSession {
+  id              Int               @id @default(autoincrement())
+  examId          Int               @map("exam_id")
+  teacherId       Int               @map("teacher_id")
+  fileName        String?           @map("file_name") @db.VarChar(255)
+  fileType        String?           @map("file_type") @db.VarChar(50)
+  rawQuestions    Json              @map("raw_questions")
+  reviewedData    Json?             @map("reviewed_data")
+  status          OcrSessionStatus  @default(processing)
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  // Relations
+  exam    Exam  @relation(fields: [examId], references: [id], onDelete: Cascade)
+  teacher User  @relation("TeacherOcrSessions", fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@map("ocr_sessions")
 }
 
 // Teacher-Subject junction table (Giáo viên đăng ký môn dạy)

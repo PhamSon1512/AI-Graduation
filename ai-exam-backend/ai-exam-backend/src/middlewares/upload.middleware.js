@@ -28,14 +28,16 @@ const ALLOWED_MIMES = {
   'image/gif': 'image',
   'application/pdf': 'pdf',
   'application/msword': 'word',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'word'
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'word',
+  'application/vnd.ms-excel': 'excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'excel'
 };
 
 const examFileFilter = (req, file, cb) => {
   if (ALLOWED_MIMES[file.mimetype]) {
     cb(null, true);
   } else {
-    cb(new Error('Chỉ chấp nhận file: JPG, PNG, WebP, GIF, PDF, DOC, DOCX'), false);
+    cb(new Error('Chỉ chấp nhận file: JPG, PNG, WebP, GIF, PDF, DOC, DOCX, XLS, XLSX'), false);
   }
 };
 
@@ -99,12 +101,11 @@ const getFileType = (mimetype) => {
   return ALLOWED_MIMES[mimetype] || 'unknown';
 };
 
-module.exports = {
-  uploadToDisk,
-  uploadToMemory,
-  uploadExamFiles,
-  handleMulterError,
-  uploadDir,
-  getFileType,
-  ALLOWED_MIMES
-};
+module.exports = uploadExamFiles;
+module.exports.uploadToDisk = uploadToDisk;
+module.exports.uploadToMemory = uploadToMemory;
+module.exports.uploadExamFiles = uploadExamFiles;
+module.exports.handleMulterError = handleMulterError;
+module.exports.uploadDir = uploadDir;
+module.exports.getFileType = getFileType;
+module.exports.ALLOWED_MIMES = ALLOWED_MIMES;

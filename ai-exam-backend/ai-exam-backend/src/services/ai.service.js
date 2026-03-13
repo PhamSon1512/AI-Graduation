@@ -8,46 +8,71 @@ const {
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
 
-const OCR_EXAM_PROMPT = `Bạn là chuyên gia OCR đề thi Vật Lý 12. Hãy trích xuất TẤT CẢ câu hỏi trắc nghiệm từ nội dung này.
+const OCR_EXAM_PROMPT = `Bạn là chuyên gia OCR đề thi. Hãy trích xuất TẤT CẢ câu hỏi từ nội dung này.
 
-QUAN TRỌNG: Trả về ĐÚNG định dạng JSON sau, không thêm bất kỳ text nào khác:
+QUAN TRỌNG VỀ HÌNH ẢNH:
+- Nếu câu hỏi có hình ảnh (biển báo, sơ đồ, đồ thị, hình vẽ), hãy MÔ TẢ CHI TIẾT hình ảnh đó
+- Đặt has_image: true và điền image_description
+- Mô tả từng đáp án hình ảnh nếu đáp án là hình
+
+VÍ DỤ cho câu hỏi có hình biển báo:
+{
+  "content_html": "Biển báo nào dưới đây cảnh báo khu vực có chất phóng xạ?",
+  "has_image": true,
+  "image_description": "Câu hỏi có 4 biển báo hình tam giác: A-biển có hình tia sét (nguy hiểm điện), B-biển có ký hiệu phóng xạ 3 cánh quạt, C-biển có ký hiệu sinh học nguy hiểm, D-biển có dấu chấm than",
+  "options": {
+    "A": "Biển hình tam giác vàng có hình tia sét (cảnh báo điện cao áp)",
+    "B": "Biển hình tam giác vàng có ký hiệu phóng xạ (☢) 3 cánh quạt",
+    "C": "Biển hình tam giác vàng có ký hiệu sinh học nguy hiểm (☣)",
+    "D": "Biển hình tam giác vàng có dấu chấm than cảnh báo chung"
+  },
+  "correct_answer": "B"
+}
+
+ĐỊNH DẠNG JSON TRẢ VỀ (KHÔNG thêm text khác):
 
 {
   "questions": [
     {
-      "content_html": "Nội dung câu hỏi (giữ nguyên công thức, dùng LaTeX cho công thức toán: $v = \\\\omega A$)",
+      "content_html": "Nội dung câu hỏi (dùng LaTeX cho công thức: $v = \\\\omega A$)",
+      "has_image": true/false,
+      "image_description": "Mô tả chi tiết hình ảnh nếu có, null nếu không",
+      "question_type": "trac_nghiem hoặc tu_luan",
       "options": {
-        "A": "Nội dung đáp án A",
-        "B": "Nội dung đáp án B",
-        "C": "Nội dung đáp án C",
-        "D": "Nội dung đáp án D"
+        "A": "Đáp án A (mô tả hình nếu đáp án là hình)",
+        "B": "Đáp án B",
+        "C": "Đáp án C",
+        "D": "Đáp án D"
       },
-      "correct_answer": "A hoặc B hoặc C hoặc D (nếu nhìn thấy đáp án đúng, không thì để null)",
+      "correct_answer": "A/B/C/D nếu thấy, null nếu không",
       "topic": "một trong: ${PHYSICS_12_TOPICS.join(', ')}",
       "bloom_level": "một trong: ${BLOOM_LEVELS.join(', ')}",
-      "explanation_html": "Lời giải nếu có trong ảnh, không có thì để null"
+      "explanation_html": "Lời giải nếu có, null nếu không"
     }
   ],
   "metadata": {
-    "total_questions": "số câu hỏi tìm được",
+    "total_questions": số_câu_hỏi,
     "exam_title": "tiêu đề đề thi nếu có",
+    "has_images": true/false,
     "subject": "Vật Lý 12"
   }
 }
 
 Hướng dẫn xác định topic:
-- dao_dong_co: Con lắc đơn, con lắc lò xo, dao động điều hòa, chu kỳ, tần số
+- dao_dong_co: Con lắc, dao động điều hòa, chu kỳ, tần số
 - song_co: Sóng cơ, giao thoa sóng, sóng dừng, sóng âm
-- dien_xoay_chieu: Mạch RLC, điện xoay chiều, công suất, hệ số công suất
+- dien_xoay_chieu: Mạch RLC, điện xoay chiều, công suất
 - song_anh_sang: Giao thoa ánh sáng, tán sắc, quang phổ
 - luong_tu_anh_sang: Hiện tượng quang điện, lưỡng tính sóng hạt
 - vat_ly_hat_nhan: Phóng xạ, phản ứng hạt nhân, năng lượng liên kết
+- nhiet_hoc: Nhiệt động lực học, khí lý tưởng
+- dien_tu_truong: Sóng điện từ, điện trường, từ trường
 
 Hướng dẫn xác định bloom_level:
-- nhan_biet: Câu hỏi nhớ công thức, định nghĩa đơn giản
-- thong_hieu: Câu hỏi giải thích, so sánh
+- nhan_biet: Nhớ công thức, định nghĩa đơn giản
+- thong_hieu: Giải thích, so sánh
 - van_dung: Bài tập tính toán cơ bản
-- van_dung_cao: Bài tập phức tạp, nhiều bước, kết hợp kiến thức`;
+- van_dung_cao: Bài tập phức tạp, nhiều bước`;
 
 const extractTextFromPdf = async (buffer) => {
   try {
@@ -159,11 +184,15 @@ const parseOcrResponse = (text) => {
   const parsed = JSON.parse(jsonMatch[0]);
 
   if (parsed.questions) {
-    parsed.questions = parsed.questions.map(q => ({
+    parsed.questions = parsed.questions.map((q, index) => ({
       ...q,
+      order_number: index + 1,
       topic: PHYSICS_12_TOPICS.includes(q.topic) ? q.topic : 'dao_dong_co',
       bloom_level: BLOOM_LEVELS.includes(q.bloom_level) ? q.bloom_level : 'nhan_biet',
-      correct_answer: ['A', 'B', 'C', 'D'].includes(q.correct_answer) ? q.correct_answer : null
+      question_type: q.question_type === 'tu_luan' ? 'tu_luan' : 'trac_nghiem',
+      correct_answer: q.correct_answer ? String(q.correct_answer).toUpperCase() : null,
+      has_image: q.has_image || false,
+      image_description: q.image_description || null
     }));
   }
 
