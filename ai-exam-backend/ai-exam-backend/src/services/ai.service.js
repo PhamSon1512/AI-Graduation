@@ -166,7 +166,7 @@ const ocrWithGroq = async (fileBuffer, mimeType) => {
   }
 
   const completion = await groq.chat.completions.create({
-    model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+    model: MODELS.groq.vision,
     messages: messages,
     temperature: 0.1,
     max_tokens: 8000
