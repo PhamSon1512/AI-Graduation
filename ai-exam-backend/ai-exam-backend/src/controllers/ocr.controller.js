@@ -271,6 +271,7 @@ const saveOcrQuestions = async (req, res) => {
           correctAnswer: q.correct_answer || null,
           explanationHtml: q.explanation_html || null,
           hasImage: q.has_image || false,
+          imageUrl: q.page_image_url || null,
           imageDescription: q.image_description || null,
           isAiGenerated: true,
           status: 'draft',

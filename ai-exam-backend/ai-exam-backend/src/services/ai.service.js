@@ -204,32 +204,55 @@ const isImageFile = (mimeType) => {
 };
 
 const ocrExamImage = async (fileBuffer, mimeType = 'image/png') => {
+  const useGeminiForImages = true;
+  
   try {
     let responseText;
 
-    if (isImageFile(mimeType)) {
-      console.log('🖼️ Image detected → Using Gemini Vision for OCR...');
-      responseText = await ocrWithGemini(fileBuffer, mimeType);
+    if (isImageFile(mimeType) && useGeminiForImages) {
+      console.log('🖼️ Image detected → Trying Gemini Vision...');
+      try {
+        responseText = await ocrWithGemini(fileBuffer, mimeType);
+      } catch (geminiError) {
+        console.error('❌ Gemini failed:', geminiError.message);
+        console.log('🔄 Falling back to Groq Vision...');
+        responseText = await ocrWithGroq(fileBuffer, mimeType);
+      }
+    } else if (isImageFile(mimeType)) {
+      console.log('🖼️ Image detected → Using Groq Vision...');
+      responseText = await ocrWithGroq(fileBuffer, mimeType);
     } else {
-      console.log('📄 Document detected → Using Groq for OCR...');
+      console.log('📄 Document detected → Using Groq...');
       responseText = await ocrWithGroq(fileBuffer, mimeType);
     }
 
     return parseOcrResponse(responseText);
   } catch (error) {
     console.error('OCR Error:', error);
-    
-    if (isImageFile(mimeType) && error.message.includes('Gemini')) {
-      console.log('⚠️ Gemini failed, trying Groq as fallback...');
-      try {
-        const fallbackText = await ocrWithGroq(fileBuffer, mimeType);
-        return parseOcrResponse(fallbackText);
-      } catch (fallbackError) {
-        throw new Error(`Lỗi OCR: ${error.message}`);
-      }
-    }
-    
     throw new Error(`Lỗi OCR: ${error.message}`);
+  }
+};
+
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+const { uploadImage, isCloudinaryConfigured } = require('../config/cloudinary.config');
+
+const uploadPageImage = async (fileBuffer, filename) => {
+  if (!isCloudinaryConfigured()) {
+    console.log('⚠️ Cloudinary not configured, skipping image upload');
+    return null;
+  }
+  
+  try {
+    const result = await uploadImage(fileBuffer, {
+      folder: 'ai-exam/exam-pages',
+      public_id: `page_${Date.now()}_${filename.replace(/\.[^/.]+$/, '')}`
+    });
+    console.log(`☁️ Uploaded to Cloudinary: ${result.url}`);
+    return result.url;
+  } catch (error) {
+    console.error('❌ Cloudinary upload failed:', error.message);
+    return null;
   }
 };
 
@@ -240,20 +263,50 @@ const ocrMultipleFiles = async (files) => {
       total_questions: 0,
       files_processed: 0,
       errors: [],
-      provider: AI_PROVIDER
+      provider: AI_PROVIDER,
+      page_images: []
     }
   };
 
-  for (const file of files) {
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    
+    if (i > 0) {
+      console.log(`⏳ Waiting 3 seconds before processing file ${i + 1}/${files.length} to avoid rate limit...`);
+      await delay(3000);
+    }
+    
+    console.log(`📄 Processing file ${i + 1}/${files.length}: ${file.originalname}`);
+    
     try {
+      let pageImageUrl = null;
+      
+      if (isImageFile(file.mimetype)) {
+        pageImageUrl = await uploadPageImage(file.buffer, file.originalname);
+      }
+      
+      results.metadata.page_images.push({
+        page: i + 1,
+        filename: file.originalname,
+        url: pageImageUrl
+      });
+      
       const fileResult = await ocrExamImage(file.buffer, file.mimetype);
 
       if (fileResult.questions && Array.isArray(fileResult.questions)) {
-        results.questions.push(...fileResult.questions);
+        const questionsWithPage = fileResult.questions.map((q, idx) => ({
+          ...q,
+          page_number: i + 1,
+          source_file: file.originalname,
+          page_image_url: pageImageUrl
+        }));
+        results.questions.push(...questionsWithPage);
       }
 
       results.metadata.files_processed++;
+      console.log(`✅ File ${i + 1} processed successfully`);
     } catch (error) {
+      console.error(`❌ File ${i + 1} failed:`, error.message);
       results.metadata.errors.push({
         filename: file.originalname,
         error: error.message
