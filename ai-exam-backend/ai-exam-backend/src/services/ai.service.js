@@ -199,21 +199,36 @@ const parseOcrResponse = (text) => {
   return parsed;
 };
 
+const isImageFile = (mimeType) => {
+  return mimeType.startsWith('image/');
+};
+
 const ocrExamImage = async (fileBuffer, mimeType = 'image/png') => {
   try {
     let responseText;
 
-    if (AI_PROVIDER === 'groq') {
-      console.log('🔄 Using Groq for OCR...');
-      responseText = await ocrWithGroq(fileBuffer, mimeType);
-    } else {
-      console.log('🔄 Using Gemini for OCR...');
+    if (isImageFile(mimeType)) {
+      console.log('🖼️ Image detected → Using Gemini Vision for OCR...');
       responseText = await ocrWithGemini(fileBuffer, mimeType);
+    } else {
+      console.log('📄 Document detected → Using Groq for OCR...');
+      responseText = await ocrWithGroq(fileBuffer, mimeType);
     }
 
     return parseOcrResponse(responseText);
   } catch (error) {
     console.error('OCR Error:', error);
+    
+    if (isImageFile(mimeType) && error.message.includes('Gemini')) {
+      console.log('⚠️ Gemini failed, trying Groq as fallback...');
+      try {
+        const fallbackText = await ocrWithGroq(fileBuffer, mimeType);
+        return parseOcrResponse(fallbackText);
+      } catch (fallbackError) {
+        throw new Error(`Lỗi OCR: ${error.message}`);
+      }
+    }
+    
     throw new Error(`Lỗi OCR: ${error.message}`);
   }
 };
@@ -266,21 +281,15 @@ D. ${question.options?.D || ''}
 Hãy viết lời giải chi tiết bằng tiếng Việt, sử dụng LaTeX cho công thức (ví dụ: $E = mc^2$).
 Trả về HTML format với các tag <p>, <strong>, <em> phù hợp.`;
 
-    if (AI_PROVIDER === 'groq') {
-      const groq = getGroqClient();
-      const completion = await groq.chat.completions.create({
-        model: 'llama-3.3-70b-versatile',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.3,
-        max_tokens: 2000
-      });
-      return completion.choices[0]?.message?.content || '';
-    } else {
-      const model = getGeminiModel('text');
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      return response.text();
-    }
+    const groq = getGroqClient();
+    console.log('📝 Using Groq for text generation (explanation)...');
+    const completion = await groq.chat.completions.create({
+      model: MODELS.groq.text,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.3,
+      max_tokens: 2000
+    });
+    return completion.choices[0]?.message?.content || '';
   } catch (error) {
     console.error('Generate Explanation Error:', error);
     throw new Error(`Lỗi tạo lời giải: ${error.message}`);
@@ -299,23 +308,15 @@ Trả về JSON:
   "reasoning": "Lý do chọn mức độ này"
 }`;
 
-    let responseText;
-
-    if (AI_PROVIDER === 'groq') {
-      const groq = getGroqClient();
-      const completion = await groq.chat.completions.create({
-        model: 'llama-3.3-70b-versatile',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.1,
-        max_tokens: 500
-      });
-      responseText = completion.choices[0]?.message?.content || '';
-    } else {
-      const model = getGeminiModel('text');
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      responseText = response.text();
-    }
+    console.log('📊 Using Groq for text analysis (difficulty)...');
+    const groq = getGroqClient();
+    const completion = await groq.chat.completions.create({
+      model: MODELS.groq.text,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.1,
+      max_tokens: 500
+    });
+    const responseText = completion.choices[0]?.message?.content || '';
 
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
