@@ -56,18 +56,24 @@ HƯỚNG DẪN MỨC ĐỘ BLOOM:
 - van_dung: Bài tập tính toán cơ bản, áp dụng công thức
 - van_dung_cao: Bài tập phức tạp, nhiều bước, kết hợp kiến thức
 
-TRẢ VỀ JSON (KHÔNG thêm text khác):
+QUAN TRỌNG VỀ FORMAT:
+- Trả về ĐÚNG JSON format, không thêm markdown hay text khác
+- Với công thức toán/vật lý: dùng ký hiệu Unicode thay vì LaTeX (ví dụ: ω thay vì \\omega, π thay vì \\pi, √ thay vì \\sqrt)
+- Hoặc viết công thức đơn giản: v = omega*A, E = mc^2
+- KHÔNG dùng ký tự đặc biệt trong JSON
+
+TRẢ VỀ JSON:
 {
   "questions": [
     {
-      "content_html": "Nội dung câu hỏi (dùng LaTeX: $v = \\\\omega A$)",
+      "content_html": "Nội dung câu hỏi (ví dụ: Cho con lắc có tần số góc ω = 2π rad/s)",
       "options": {
         "A": "Đáp án A",
         "B": "Đáp án B", 
         "C": "Đáp án C",
         "D": "Đáp án D"
       },
-      "correct_answer": "A hoặc B hoặc C hoặc D",
+      "correct_answer": "A",
       "explanation_html": "Lời giải chi tiết",
       "topic": "{topic}",
       "bloom_level": "{bloomLevel}"
@@ -139,11 +145,66 @@ TRẢ VỀ JSON:
 // ==================== HELPER FUNCTIONS ====================
 
 const parseJsonResponse = (text) => {
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error('Không thể parse JSON từ response');
+  let jsonStr = text;
+  
+  const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
+  if (jsonMatch) {
+    jsonStr = jsonMatch[1];
+  } else {
+    const objectMatch = text.match(/\{[\s\S]*\}/);
+    if (objectMatch) {
+      jsonStr = objectMatch[0];
+    }
   }
-  return JSON.parse(jsonMatch[0]);
+
+  if (!jsonStr || !jsonStr.trim()) {
+    throw new Error('Không tìm thấy JSON trong response');
+  }
+
+  const cleanJson = (str) => {
+    return str
+      .replace(/\\(?!["\\/bfnrtu])/g, '\\\\')
+      .replace(/[\x00-\x1F\x7F]/g, (char) => {
+        if (char === '\n') return '\\n';
+        if (char === '\r') return '\\r';
+        if (char === '\t') return '\\t';
+        return '';
+      })
+      .replace(/,(\s*[}\]])/g, '$1')
+      .replace(/(['"])?([a-zA-Z0-9_]+)(['"])?:/g, '"$2":')
+      .replace(/:\s*'([^']*)'/g, ': "$1"');
+  };
+
+  const attempts = [
+    () => JSON.parse(jsonStr),
+    () => JSON.parse(cleanJson(jsonStr)),
+    () => {
+      const strictClean = jsonStr
+        .replace(/\\n/g, ' ')
+        .replace(/\\r/g, '')
+        .replace(/\\t/g, ' ')
+        .replace(/\\/g, '\\\\')
+        .replace(/\\\\\\\\/g, '\\\\');
+      return JSON.parse(strictClean);
+    },
+    () => {
+      const lines = jsonStr.split('\n');
+      const filtered = lines.filter(line => !line.trim().startsWith('//')).join('\n');
+      return JSON.parse(cleanJson(filtered));
+    }
+  ];
+
+  for (let i = 0; i < attempts.length; i++) {
+    try {
+      return attempts[i]();
+    } catch (e) {
+      if (i === attempts.length - 1) {
+        console.error('JSON Parse Error - Raw response:', jsonStr.substring(0, 500));
+        console.error('Parse error:', e.message);
+        throw new Error(`Không thể parse JSON: ${e.message}`);
+      }
+    }
+  }
 };
 
 const callGroqChat = async (prompt, maxTokens = 4000) => {
@@ -202,19 +263,41 @@ const generateQuestions = async ({ subjectId, topic, bloomLevel, questionType = 
     .replace(/{bloomLevel}/g, bloomLevel)
     .replace('{questionType}', questionType === 'tu_luan' ? 'tự luận ngắn' : 'trắc nghiệm 4 đáp án');
 
-  const response = await callGroqChat(prompt, 6000);
-  const parsed = parseJsonResponse(response);
+  const maxRetries = 3;
+  let lastError = null;
 
-  return {
-    questions: (parsed.questions || []).map((q, idx) => ({
-      ...q,
-      subject_id: subjectId,
-      subject_name: subject.name,
-      order_number: idx + 1,
-      is_ai_generated: true
-    })),
-    subject: { id: subject.id, name: subject.name }
-  };
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`🔄 Generate questions attempt ${attempt}/${maxRetries}...`);
+      
+      const response = await callGroqChat(prompt, 6000);
+      const parsed = parseJsonResponse(response);
+
+      if (!parsed.questions || !Array.isArray(parsed.questions) || parsed.questions.length === 0) {
+        throw new Error('AI không trả về câu hỏi hợp lệ');
+      }
+
+      return {
+        questions: parsed.questions.map((q, idx) => ({
+          ...q,
+          subject_id: subjectId,
+          subject_name: subject.name,
+          order_number: idx + 1,
+          is_ai_generated: true
+        })),
+        subject: { id: subject.id, name: subject.name }
+      };
+    } catch (error) {
+      lastError = error;
+      console.error(`❌ Attempt ${attempt} failed:`, error.message);
+      
+      if (attempt < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      }
+    }
+  }
+
+  throw new Error(`Không thể sinh câu hỏi sau ${maxRetries} lần thử: ${lastError?.message}`);
 };
 
 // ==================== AI EXAM GENERATOR FUNCTIONS ====================
