@@ -168,19 +168,21 @@ const getQuestions = async (req, res) => {
       limit = 20,
       topic,
       bloom_level,
-      subject = 'vat_ly_12',
+      subjectId,
       is_ai_generated,
       search
     } = req.query;
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    const take = parseInt(limit);
+    const take = Math.min(parseInt(limit), 50);
 
-    const where = {
-      subject
-    };
+    const where = {};
 
-    if (topic && PHYSICS_12_TOPICS.includes(topic)) {
+    if (subjectId) {
+      where.subjectId = parseInt(subjectId);
+    }
+
+    if (topic) {
       where.topic = topic;
     }
 
@@ -206,6 +208,12 @@ const getQuestions = async (req, res) => {
         take,
         orderBy: { createdAt: 'desc' },
         include: {
+          subject: {
+            select: { id: true, name: true, code: true }
+          },
+          exam: {
+            select: { id: true, code: true, title: true }
+          },
           createdBy: {
             select: { id: true, fullName: true }
           }
@@ -220,7 +228,7 @@ const getQuestions = async (req, res) => {
         questions,
         pagination: {
           page: parseInt(page),
-          limit: parseInt(limit),
+          limit: take,
           total,
           totalPages: Math.ceil(total / take)
         }

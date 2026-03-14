@@ -83,7 +83,7 @@ router.get('/excel-templates/:templateId/download', authorizeRoles('teacher', 'a
 
 /**
  * @swagger
- * /api/questions/random:
+ * /api/exams/random:
  *   post:
  *     summary: Lấy câu hỏi ngẫu nhiên theo phân bổ
  *     tags: [Random Questions]
@@ -121,7 +121,7 @@ router.post('/random', authorizeRoles('teacher', 'admin'), getRandomQuestions);
 
 /**
  * @swagger
- * /api/questions/random/available:
+ * /api/exams/random/available:
  *   get:
  *     summary: Xem số lượng câu hỏi có sẵn theo tiêu chí
  *     tags: [Random Questions]

@@ -177,12 +177,17 @@ router.get('/stats', getQuestionStats);
  *         schema:
  *           type: integer
  *           default: 20
- *         description: Số câu hỏi mỗi trang
+ *           maximum: 50
+ *         description: Số câu hỏi mỗi trang (tối đa 50)
+ *       - in: query
+ *         name: subjectId
+ *         schema:
+ *           type: integer
+ *         description: Lọc theo ID môn học
  *       - in: query
  *         name: topic
  *         schema:
  *           type: string
- *           enum: [dao_dong_co, song_co, dien_xoay_chieu, song_anh_sang, luong_tu_anh_sang, vat_ly_hat_nhan]
  *         description: Lọc theo chủ đề
  *       - in: query
  *         name: bloom_level
