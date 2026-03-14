@@ -13,6 +13,7 @@ const subjectRoutes = require('./routes/subject.routes');
 const examRoutes = require('./routes/exam.routes');
 const adminExamRoutes = require('./routes/admin.exam.routes');
 const classRoutes = require('./routes/class.routes');
+const aiRoutes = require('./routes/ai.routes');
 
 const app = express();
 
@@ -102,6 +103,7 @@ app.use('/api', subjectRoutes);
 app.use('/api/exams', examRoutes);
 app.use('/api/admin/exams', adminExamRoutes);
 app.use('/api/classes', classRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Xử lý Route không tồn tại
 app.use((req, res, next) => {
