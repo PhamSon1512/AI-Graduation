@@ -186,7 +186,7 @@ router.use(authenticate);
  *       409:
  *         description: Mã môn học đã tồn tại
  */
-router.route('/')
+router.route('/subjects')
   .get(getAllSubjects)
   .post(authorizeRoles('admin'), createSubject);
 
@@ -243,7 +243,7 @@ router.route('/')
  *       404:
  *         description: Không tìm thấy môn học
  */
-router.route('/:id')
+router.route('/subjects/:id')
   .get(getSubjectById)
   .put(authorizeRoles('admin'), updateSubject);
 
@@ -281,7 +281,7 @@ router.route('/:id')
  *       404:
  *         description: Không tìm thấy môn học
  */
-router.patch('/:id/status', authorizeRoles('admin'), toggleSubjectStatus);
+router.patch('/subjects/:id/status', authorizeRoles('admin'), toggleSubjectStatus);
 
 // ==================== TEACHER SUBJECT ROUTES ====================
 
