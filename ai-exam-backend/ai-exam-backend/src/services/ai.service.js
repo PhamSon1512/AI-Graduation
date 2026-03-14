@@ -3,7 +3,8 @@ const {
   getGeminiModel,
   getGroqClient,
   PHYSICS_12_TOPICS,
-  BLOOM_LEVELS
+  BLOOM_LEVELS,
+  MODELS
 } = require('../config/ai.config');
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');

@@ -39,7 +39,7 @@ const MODELS = {
     text: 'gemini-2.0-flash'
   },
   groq: {
-    vision: 'llama-3.2-90b-vision-preview',
+    vision: 'meta-llama/llama-4-scout-17b-16e-instruct',
     text: 'llama-3.3-70b-versatile'
   }
 };
