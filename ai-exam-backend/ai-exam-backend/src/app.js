@@ -18,13 +18,18 @@ const aiRoutes = require('./routes/ai.routes');
 const app = express();
 
 // CORS Configuration
+// FRONTEND_URL có thể là 1 URL hoặc nhiều URL cách nhau bởi dấu phẩy (vd: http://localhost:5173,https://fe-deploy.pages.dev)
+const frontendUrls = (process.env.FRONTEND_URL || '')
+  .split(',')
+  .map(u => u.trim())
+  .filter(Boolean);
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:5173',
   'http://127.0.0.1:3000',
   'http://127.0.0.1:5173',
   'https://ai-graduation-fe.pages.dev',
-  process.env.FRONTEND_URL
+  ...frontendUrls
 ].filter(Boolean);
 
 const corsOptions = {
