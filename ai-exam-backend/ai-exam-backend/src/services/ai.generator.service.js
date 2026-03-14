@@ -42,7 +42,7 @@ Ví dụ format:
   <p>Từ đề bài ta có...</p>
 </div>`;
 
-const GENERATE_QUESTION_PROMPT = `Bạn là chuyên gia soạn đề thi Vật Lý 12. Hãy tạo {count} câu hỏi trắc nghiệm.
+const GENERATE_QUESTION_PROMPT = `Bạn là chuyên gia soạn đề thi Vật Lý 12. Hãy tạo đúng {count} câu hỏi trắc nghiệm.
 
 YÊU CẦU:
 - Môn học: {subject}
@@ -56,30 +56,14 @@ HƯỚNG DẪN MỨC ĐỘ BLOOM:
 - van_dung: Bài tập tính toán cơ bản, áp dụng công thức
 - van_dung_cao: Bài tập phức tạp, nhiều bước, kết hợp kiến thức
 
-QUAN TRỌNG VỀ FORMAT:
-- Trả về ĐÚNG JSON format, không thêm markdown hay text khác
-- Với công thức toán/vật lý: dùng ký hiệu Unicode thay vì LaTeX (ví dụ: ω thay vì \\omega, π thay vì \\pi, √ thay vì \\sqrt)
-- Hoặc viết công thức đơn giản: v = omega*A, E = mc^2
-- KHÔNG dùng ký tự đặc biệt trong JSON
+QUY TẮC BẮT BUỘC KHI TRẢ VỀ JSON:
+1. Chỉ trả về một object JSON, không thêm markdown, không giải thích trước/sau.
+2. Trong chuỗi JSON, công thức toán chỉ được viết bằng: chữ (omega, pi, alpha), ký hiệu Unicode (ω, π, √, ², ×), hoặc ký tự ASCII (^, *, /). KHÔNG dùng backslash LaTeX như \\omega, \\pi, \\frac trong chuỗi.
+3. Ví dụ đúng: "content_html": "Phương trình x = 5cos(2πt) cm" hoặc "Tần số góc ω = 2π rad/s".
+4. Ví dụ sai: "content_html": "x = 5\\\\cos(2\\\\pi t)" (tránh backslash).
 
-TRẢ VỀ JSON:
-{
-  "questions": [
-    {
-      "content_html": "Nội dung câu hỏi (ví dụ: Cho con lắc có tần số góc ω = 2π rad/s)",
-      "options": {
-        "A": "Đáp án A",
-        "B": "Đáp án B", 
-        "C": "Đáp án C",
-        "D": "Đáp án D"
-      },
-      "correct_answer": "A",
-      "explanation_html": "Lời giải chi tiết",
-      "topic": "{topic}",
-      "bloom_level": "{bloomLevel}"
-    }
-  ]
-}`;
+TRẢ VỀ ĐÚNG FORMAT NÀY:
+{"questions":[{"content_html":"...","options":{"A":"...","B":"...","C":"...","D":"..."},"correct_answer":"A","explanation_html":"...","topic":"{topic}","bloom_level":"{bloomLevel}"}]}`;
 
 const ANALYZE_EXAM_REQUEST_PROMPT = `Bạn là chuyên gia phân tích yêu cầu đề thi. Hãy phân tích yêu cầu sau và trả về cấu trúc đề thi.
 
@@ -127,26 +111,30 @@ YÊU CẦU:
 - Loại: trắc nghiệm 4 đáp án
 - KHÔNG sao chép câu mẫu, chỉ tham khảo style
 
-TRẢ VỀ JSON:
-{
-  "questions": [
-    {
-      "content_html": "Nội dung câu hỏi mới",
-      "options": { "A": "...", "B": "...", "C": "...", "D": "..." },
-      "correct_answer": "A/B/C/D",
-      "explanation_html": "Lời giải",
-      "topic": "{topic}",
-      "bloom_level": "{bloomLevel}",
-      "is_ai_generated": true
-    }
-  ]
-}`;
+QUAN TRỌNG: Trong JSON không dùng backslash LaTeX (\\\\omega, \\\\pi). Chỉ dùng chữ (omega, pi), Unicode (ω, π, √) hoặc ASCII. Chỉ trả về một object JSON.
+
+TRẢ VỀ: {"questions":[{"content_html":"...","options":{"A":"...","B":"...","C":"...","D":"..."},"correct_answer":"A","explanation_html":"...","topic":"{topic}","bloom_level":"{bloomLevel}","is_ai_generated":true}]}`;
 
 // ==================== HELPER FUNCTIONS ====================
 
+/**
+ * Sửa chuỗi JSON có escape không hợp lệ (vd: \omega, \frac trong LaTeX).
+ * Trong JSON chỉ hợp lệ: \", \\, \/, \b, \f, \n, \r, \t, \uXXXX.
+ */
+const repairJsonEscapes = (str) => {
+  return str.replace(/\\(?!["\\/bfnrtu]|u[0-9a-fA-F]{4})/g, '\\\\');
+};
+
+/**
+ * Loại bỏ trailing comma trước ] hoặc }.
+ */
+const removeTrailingCommas = (str) => {
+  return str.replace(/,(\s*[}\]])/g, '$1');
+};
+
 const parseJsonResponse = (text) => {
   let jsonStr = text;
-  
+
   const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
   if (jsonMatch) {
     jsonStr = jsonMatch[1];
@@ -161,36 +149,14 @@ const parseJsonResponse = (text) => {
     throw new Error('Không tìm thấy JSON trong response');
   }
 
-  const cleanJson = (str) => {
-    return str
-      .replace(/\\(?!["\\/bfnrtu])/g, '\\\\')
-      .replace(/[\x00-\x1F\x7F]/g, (char) => {
-        if (char === '\n') return '\\n';
-        if (char === '\r') return '\\r';
-        if (char === '\t') return '\\t';
-        return '';
-      })
-      .replace(/,(\s*[}\]])/g, '$1')
-      .replace(/(['"])?([a-zA-Z0-9_]+)(['"])?:/g, '"$2":')
-      .replace(/:\s*'([^']*)'/g, ': "$1"');
-  };
+  jsonStr = removeTrailingCommas(jsonStr);
 
   const attempts = [
+    () => JSON.parse(repairJsonEscapes(jsonStr)),
     () => JSON.parse(jsonStr),
-    () => JSON.parse(cleanJson(jsonStr)),
     () => {
-      const strictClean = jsonStr
-        .replace(/\\n/g, ' ')
-        .replace(/\\r/g, '')
-        .replace(/\\t/g, ' ')
-        .replace(/\\/g, '\\\\')
-        .replace(/\\\\\\\\/g, '\\\\');
-      return JSON.parse(strictClean);
-    },
-    () => {
-      const lines = jsonStr.split('\n');
-      const filtered = lines.filter(line => !line.trim().startsWith('//')).join('\n');
-      return JSON.parse(cleanJson(filtered));
+      const noComments = jsonStr.split('\n').filter(l => !l.trim().startsWith('//')).join('\n');
+      return JSON.parse(repairJsonEscapes(removeTrailingCommas(noComments)));
     }
   ];
 
@@ -199,8 +165,8 @@ const parseJsonResponse = (text) => {
       return attempts[i]();
     } catch (e) {
       if (i === attempts.length - 1) {
-        console.error('JSON Parse Error - Raw response:', jsonStr.substring(0, 500));
-        console.error('Parse error:', e.message);
+        console.error('JSON Parse Error:', e.message);
+        console.error('Snippet:', jsonStr.substring(0, 400));
         throw new Error(`Không thể parse JSON: ${e.message}`);
       }
     }
