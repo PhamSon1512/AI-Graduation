@@ -11,6 +11,7 @@ const {
   removeStudentFromClass,
   getClassResults
 } = require('../controllers/class.controller');
+const { getAssignmentsByClass } = require('../controllers/assignment.controller');
 
 router.use(authenticate);
 
@@ -276,6 +277,10 @@ router.post('/:classId/students', authorizeRoles('teacher', 'admin'), addStudent
  *         description: Xóa học sinh thành công
  */
 router.delete('/:classId/students/:studentId', authorizeRoles('teacher', 'admin'), removeStudentFromClass);
+
+// ==================== CLASS ASSIGNMENTS ====================
+
+router.get('/:classId/assignments', authorizeRoles('teacher', 'admin'), getAssignmentsByClass);
 
 // ==================== CLASS RESULTS ====================
 

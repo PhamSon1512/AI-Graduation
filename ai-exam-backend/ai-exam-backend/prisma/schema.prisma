@@ -56,6 +56,21 @@ enum PracticeSessionStatus {
   completed
 }
 
+enum AssignmentType {
+  fixed_exam
+  random_config
+}
+
+enum AssignmentStatus {
+  draft
+  published
+}
+
+enum AssignmentAttemptStatus {
+  in_progress
+  completed
+}
+
 // Users table (Teachers & Students & Admin)
 model User {
   id            Int       @id @default(autoincrement())
@@ -89,6 +104,8 @@ model User {
   teachingClasses         Class[]             @relation("TeacherClasses")
   enrolledClasses         ClassStudent[]      @relation("StudentClasses")
   practiceSessions       PracticeSession[]   @relation("StudentPractice")
+  assignmentAttempts     AssignmentAttempt[] @relation("StudentAssignmentAttempts")
+  createdAssignments    Assignment[]        @relation("TeacherAssignments")
 
   @@map("users")
 }
@@ -121,7 +138,9 @@ model Question {
   createdBy             User?       @relation("QuestionCreator", fields: [createdById], references: [id], onDelete: SetNull)
   examQuestions         ExamQuestion[]
   studentQuestionLogs   StudentQuestionLog[]
-  practiceSessionQuestions PracticeSessionQuestion[]
+  practiceSessionQuestions   PracticeSessionQuestion[]
+  assignmentAttemptAnswers   AssignmentAttemptAnswer[]
+  assignmentAttemptQuestions AssignmentAttemptQuestion[]
 
   @@map("questions")
 }
@@ -150,8 +169,10 @@ model Exam {
   approvedBy          User?               @relation("ExamApprover", fields: [approvedById], references: [id], onDelete: SetNull)
   questions           Question[]          @relation("ExamQuestions")
   examQuestions       ExamQuestion[]
-  studentExamResults  StudentExamResult[]
+  studentExamResults   StudentExamResult[]
   ocrSessions         OcrSession[]
+  assignments         Assignment[]
+  assignmentAttempts  AssignmentAttempt[]
 
   @@map("exams")
 }
@@ -330,7 +351,8 @@ model Class {
   // Relations
   teacher   User           @relation("TeacherClasses", fields: [teacherId], references: [id], onDelete: Cascade)
   subject   Subject?       @relation("ClassSubject", fields: [subjectId], references: [id], onDelete: SetNull)
-  students  ClassStudent[] @relation("ClassStudents")
+  students    ClassStudent[] @relation("ClassStudents")
+  assignments Assignment[]
 
   @@map("classes")
 }
@@ -387,4 +409,84 @@ model PracticeSessionQuestion {
 
   @@unique([sessionId, questionId])
   @@map("practice_session_questions")
+}
+
+// Assignment (bài tập giao cho lớp)
+model Assignment {
+  id              Int               @id @default(autoincrement())
+  classId         Int               @map("class_id")
+  teacherId       Int               @map("teacher_id")
+  examId          Int?              @map("exam_id")
+  title           String            @db.VarChar(200)
+  description     String?           @db.Text
+  assignmentType  AssignmentType    @map("assignment_type")
+  examConfig      Json?             @map("exam_config")
+  deadline        DateTime?         @db.Timestamptz(6)
+  durationMinutes Int              @default(60) @map("duration_minutes")
+  status          AssignmentStatus  @default(draft)
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  // Relations
+  class     Class               @relation(fields: [classId], references: [id], onDelete: Cascade)
+  teacher   User                @relation("TeacherAssignments", fields: [teacherId], references: [id], onDelete: Cascade)
+  exam      Exam?               @relation(fields: [examId], references: [id], onDelete: SetNull)
+  attempts  AssignmentAttempt[]
+
+  @@map("assignments")
+}
+
+// AssignmentAttempt (mỗi học sinh làm 1 lần)
+model AssignmentAttempt {
+  id              Int                     @id @default(autoincrement())
+  assignmentId     Int                     @map("assignment_id")
+  studentId       Int                     @map("student_id")
+  examId          Int?                    @map("exam_id")
+  status          AssignmentAttemptStatus @default(in_progress)
+  startedAt       DateTime                @default(now()) @map("started_at")
+  submittedAt     DateTime?               @map("submitted_at")
+  timeSpentSeconds Int?                  @map("time_spent_seconds")
+  score           Decimal?                @db.Decimal(5, 2)
+  createdAt       DateTime                @default(now()) @map("created_at")
+
+  // Relations
+  assignment   Assignment                 @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student      User                       @relation("StudentAssignmentAttempts", fields: [studentId], references: [id], onDelete: Cascade)
+  exam         Exam?                      @relation(fields: [examId], references: [id], onDelete: SetNull)
+  questions    AssignmentAttemptQuestion[]
+  answers      AssignmentAttemptAnswer[]
+
+  @@unique([assignmentId, studentId])
+  @@map("assignment_attempts")
+}
+
+// AssignmentAttemptQuestion (câu hỏi trong attempt - dùng cho random type)
+model AssignmentAttemptQuestion {
+  id            Int     @id @default(autoincrement())
+  attemptId     Int     @map("attempt_id")
+  questionId    Int     @map("question_id")
+  orderNumber   Int     @map("order_number")
+
+  // Relations
+  attempt  AssignmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question Question          @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, questionId])
+  @@map("assignment_attempt_questions")
+}
+
+// AssignmentAttemptAnswer (đáp án học sinh chọn)
+model AssignmentAttemptAnswer {
+  id            Int     @id @default(autoincrement())
+  attemptId     Int     @map("attempt_id")
+  questionId    Int     @map("question_id")
+  studentAnswer String? @map("student_answer") @db.VarChar(10)
+  isCorrect     Boolean? @map("is_correct")
+
+  // Relations
+  attempt  AssignmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question Question          @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, questionId])
+  @@map("assignment_attempt_answers")
 }
