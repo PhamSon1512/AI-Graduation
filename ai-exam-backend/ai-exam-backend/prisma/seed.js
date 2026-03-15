@@ -160,6 +160,34 @@ async function main() {
     console.log(`   ID: ${s.id} | ${s.code.padEnd(8)} | ${s.name} | ${s.isActive ? 'Active' : 'Hidden'}`);
   });
 
+  // Seed topics cho Vật Lý 12
+  const physicsSubject = await prisma.subject.findUnique({ where: { code: 'PHYS12' } });
+  if (physicsSubject) {
+    const defaultTopics = [
+      { code: 'dao_dong_co', name: 'Dao động cơ', orderNumber: 1 },
+      { code: 'song_co', name: 'Sóng cơ', orderNumber: 2 },
+      { code: 'dien_xoay_chieu', name: 'Dòng điện xoay chiều', orderNumber: 3 },
+      { code: 'song_anh_sang', name: 'Sóng ánh sáng', orderNumber: 4 },
+      { code: 'luong_tu_anh_sang', name: 'Lượng tử ánh sáng', orderNumber: 5 },
+      { code: 'vat_ly_hat_nhan', name: 'Vật lý hạt nhân', orderNumber: 6 }
+    ];
+    for (const t of defaultTopics) {
+      await prisma.topic.upsert({
+        where: {
+          subjectId_code: { subjectId: physicsSubject.id, code: t.code }
+        },
+        update: { name: t.name, orderNumber: t.orderNumber },
+        create: {
+          subjectId: physicsSubject.id,
+          code: t.code,
+          name: t.name,
+          orderNumber: t.orderNumber
+        }
+      });
+    }
+    console.log(`\n✅ Seed ${defaultTopics.length} topics cho Vật Lý 12`);
+  }
+
   console.log('\n🎉 Seed dữ liệu hoàn tất!');
   console.log('\n📋 Thông tin đăng nhập mặc định:');
   console.log('┌─────────────────────────────────────────────────────────┐');

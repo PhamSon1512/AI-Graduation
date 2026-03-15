@@ -51,6 +51,11 @@ enum OcrSessionStatus {
   cancelled
 }
 
+enum PracticeSessionStatus {
+  in_progress
+  completed
+}
+
 // Users table (Teachers & Students & Admin)
 model User {
   id            Int       @id @default(autoincrement())
@@ -83,6 +88,7 @@ model User {
   ocrSessions             OcrSession[]        @relation("TeacherOcrSessions")
   teachingClasses         Class[]             @relation("TeacherClasses")
   enrolledClasses         ClassStudent[]      @relation("StudentClasses")
+  practiceSessions       PracticeSession[]   @relation("StudentPractice")
 
   @@map("users")
 }
@@ -115,6 +121,7 @@ model Question {
   createdBy             User?       @relation("QuestionCreator", fields: [createdById], references: [id], onDelete: SetNull)
   examQuestions         ExamQuestion[]
   studentQuestionLogs   StudentQuestionLog[]
+  practiceSessionQuestions PracticeSessionQuestion[]
 
   @@map("questions")
 }
@@ -211,8 +218,30 @@ model Subject {
   exams           Exam[]
   questions       Question[]       @relation("SubjectQuestions")
   classes         Class[]          @relation("ClassSubject")
+  topicList       Topic[]
+  practiceSessions PracticeSession[]
 
   @@map("subjects")
+}
+
+// Topic table (chủ đề thuộc môn học)
+model Topic {
+  id          Int      @id @default(autoincrement())
+  subjectId   Int      @map("subject_id")
+  code        String   @db.VarChar(50)
+  name        String   @db.VarChar(200)
+  description String?  @db.Text
+  orderNumber Int      @default(0) @map("order_number")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  subject          Subject           @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  practiceSessions PracticeSession[]
+
+  @@unique([subjectId, code])
+  @@map("topics")
 }
 
 // OCR Session table (phiên OCR tạm để teacher duyệt)
@@ -320,4 +349,42 @@ model ClassStudent {
 
   @@unique([classId, studentId])
   @@map("class_students")
+}
+
+// Practice Session (phiên luyện tập của học sinh)
+model PracticeSession {
+  id              Int                   @id @default(autoincrement())
+  studentId       Int                   @map("student_id")
+  subjectId       Int                   @map("subject_id")
+  topicId         Int?                  @map("topic_id")
+  status          PracticeSessionStatus @default(in_progress)
+  totalQuestions  Int                   @map("total_questions")
+  score           Decimal?              @db.Decimal(5, 2)
+  createdAt       DateTime              @default(now()) @map("created_at")
+  completedAt     DateTime?             @map("completed_at")
+
+  // Relations
+  student   User                      @relation("StudentPractice", fields: [studentId], references: [id], onDelete: Cascade)
+  subject   Subject                   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  topic     Topic?                    @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  questions PracticeSessionQuestion[]
+
+  @@map("practice_sessions")
+}
+
+// Practice Session Question (câu hỏi trong phiên luyện tập)
+model PracticeSessionQuestion {
+  id            Int     @id @default(autoincrement())
+  sessionId     Int     @map("session_id")
+  questionId    Int     @map("question_id")
+  orderNumber   Int     @map("order_number")
+  studentAnswer String? @map("student_answer") @db.VarChar(10)
+  isCorrect     Boolean? @map("is_correct")
+
+  // Relations
+  session  PracticeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  question Question        @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, questionId])
+  @@map("practice_session_questions")
 }
