@@ -285,6 +285,12 @@ const saveOcrQuestions = async (req, res) => {
       data: { status: 'saved' }
     });
 
+    const newTotal = existingCount + createdQuestions.length;
+    await prisma.exam.update({
+      where: { id: parseInt(examId) },
+      data: { totalQuestions: newTotal }
+    });
+
     res.status(201).json({
       status: 'success',
       message: `Đã lưu ${createdQuestions.length} câu hỏi vào đề thi`,

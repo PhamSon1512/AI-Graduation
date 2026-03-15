@@ -45,7 +45,7 @@ VÍ DỤ cho câu hỏi có hình biển báo:
         "C": "Đáp án C",
         "D": "Đáp án D"
       },
-      "correct_answer": "A/B/C/D nếu thấy, null nếu không",
+      "correct_answer": "QUAN TRỌNG: Chỉ điền A/B/C/D cho câu TRẮC NGHIỆM khi thấy đáp án trong đề. Với câu TỰ LUẬN (tu_luan) luôn để null vì AI không đảm bảo đáp án đúng cho tự luận.",
       "topic": "một trong: ${PHYSICS_12_TOPICS.join(', ')}",
       "bloom_level": "một trong: ${BLOOM_LEVELS.join(', ')}",
       "explanation_html": "Lời giải nếu có, null nếu không"
@@ -185,16 +185,22 @@ const parseOcrResponse = (text) => {
   const parsed = JSON.parse(jsonMatch[0]);
 
   if (parsed.questions) {
-    parsed.questions = parsed.questions.map((q, index) => ({
-      ...q,
-      order_number: index + 1,
-      topic: PHYSICS_12_TOPICS.includes(q.topic) ? q.topic : 'dao_dong_co',
-      bloom_level: BLOOM_LEVELS.includes(q.bloom_level) ? q.bloom_level : 'nhan_biet',
-      question_type: q.question_type === 'tu_luan' ? 'tu_luan' : 'trac_nghiem',
-      correct_answer: q.correct_answer ? String(q.correct_answer).toUpperCase() : null,
-      has_image: q.has_image || false,
-      image_description: q.image_description || null
-    }));
+    parsed.questions = parsed.questions.map((q, index) => {
+      const isTuLuan = q.question_type === 'tu_luan';
+      const correctAnswer = isTuLuan
+        ? null
+        : (q.correct_answer ? String(q.correct_answer).toUpperCase() : null);
+      return {
+        ...q,
+        order_number: index + 1,
+        topic: PHYSICS_12_TOPICS.includes(q.topic) ? q.topic : 'dao_dong_co',
+        bloom_level: BLOOM_LEVELS.includes(q.bloom_level) ? q.bloom_level : 'nhan_biet',
+        question_type: isTuLuan ? 'tu_luan' : 'trac_nghiem',
+        correct_answer: correctAnswer,
+        has_image: q.has_image || false,
+        image_description: q.image_description || null
+      };
+    });
   }
 
   return parsed;

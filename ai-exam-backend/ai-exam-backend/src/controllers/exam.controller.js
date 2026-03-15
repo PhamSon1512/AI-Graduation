@@ -205,7 +205,11 @@ const getExamById = async (req, res) => {
 
     res.json({
       status: 'success',
-      data: exam
+      data: {
+        ...exam,
+        totalQuestions: exam.questions.length,
+        questionCount: exam.questions.length
+      }
     });
   } catch (error) {
     console.error('GetExamById error:', error);
@@ -451,6 +455,11 @@ const addQuestionToExam = async (req, res) => {
       }
     });
 
+    await prisma.exam.update({
+      where: { id: parseInt(examId) },
+      data: { totalQuestions: questionCount + 1 }
+    });
+
     res.status(201).json({
       status: 'success',
       message: 'Thêm câu hỏi thành công',
@@ -544,6 +553,12 @@ const importQuestionsFromExcel = async (req, res) => {
         }
       }))
     );
+
+    const newTotal = existingCount + createdQuestions.length;
+    await prisma.exam.update({
+      where: { id: parseInt(examId) },
+      data: { totalQuestions: newTotal }
+    });
 
     res.status(201).json({
       status: 'success',
