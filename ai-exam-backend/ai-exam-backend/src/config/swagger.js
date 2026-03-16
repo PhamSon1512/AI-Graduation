@@ -155,7 +155,9 @@ const options = {
     },
     tags: [
       { name: 'Auth', description: 'APIs xác thực người dùng' },
-      { name: 'Health', description: 'APIs kiểm tra hệ thống' }
+      { name: 'Health', description: 'APIs kiểm tra hệ thống' },
+      { name: 'AI Analysis', description: 'Phân tích kết quả học tập & dự đoán điểm' },
+      { name: 'AI Study Plan', description: 'Lộ trình học tập AI đề xuất' }
     ]
   },
   apis: ['./src/routes/*.js']

@@ -9,6 +9,13 @@ const {
   saveGeneratedExam,
   getGenerationOptions
 } = require('../controllers/ai.controller');
+const {
+  getStudentAnalysis,
+  getClassAnalysis,
+  getPredictScore,
+  getStudyPlan,
+  putStudyPlan
+} = require('../controllers/ai.analysis.controller');
 
 router.use(authenticate);
 
@@ -302,5 +309,114 @@ router.post('/generate-exam', authorizeRoles('teacher', 'admin'), generateExamHa
  *         description: Lưu đề thi thành công
  */
 router.post('/save-generated-exam', authorizeRoles('teacher', 'admin'), saveGeneratedExam);
+
+// ==================== AI ANALYSIS MODULE ====================
+
+/**
+ * @swagger
+ * /api/ai/analysis/student/{id}:
+ *   get:
+ *     summary: Phân tích kết quả cá nhân học sinh
+ *     tags: [AI Analysis]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID học sinh (student xem chính mình dùng id của mình)
+ *       - in: query
+ *         name: subjectId
+ *         schema:
+ *           type: integer
+ *         description: Lọc theo môn học (optional)
+ *     responses:
+ *       200:
+ *         description: Phân tích + gợi ý (click gợi ý → forward đến study-plan)
+ */
+router.get('/analysis/student/:id', authorizeRoles('student', 'teacher', 'admin'), getStudentAnalysis);
+
+/**
+ * @swagger
+ * /api/ai/analysis/class/{classId}:
+ *   get:
+ *     summary: Phân tích kết quả lớp học
+ *     tags: [AI Analysis]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: classId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Phân tích + gợi ý (click → forward đến giáo án, kế hoạch cải thiện)
+ */
+router.get('/analysis/class/:classId', authorizeRoles('teacher', 'admin'), getClassAnalysis);
+
+/**
+ * @swagger
+ * /api/ai/predict-score:
+ *   get:
+ *     summary: Dự đoán điểm thi dựa trên bài thi thử
+ *     tags: [AI Analysis]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: subjectId
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Điểm dự đoán + khoảng tin cậy + giải thích
+ */
+router.get('/predict-score', authorizeRoles('student', 'teacher', 'admin'), getPredictScore);
+
+// ==================== AI STUDY PLAN MODULE ====================
+
+/**
+ * @swagger
+ * /api/ai/study-plan:
+ *   get:
+ *     summary: Lấy lộ trình học (tạo mới nếu chưa có)
+ *     tags: [AI Study Plan]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: subjectId
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Lộ trình học, kế hoạch cải thiện
+ *   put:
+ *     summary: Cập nhật lộ trình học
+ *     tags: [AI Study Plan]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title:
+ *                 type: string
+ *               content:
+ *                 type: object
+ *               subjectId:
+ *                 type: integer
+ *     responses:
+ *       200:
+ *         description: Đã cập nhật
+ */
+router.get('/study-plan', authorizeRoles('student', 'teacher', 'admin'), getStudyPlan);
+router.put('/study-plan', authorizeRoles('student', 'teacher', 'admin'), putStudyPlan);
 
 module.exports = router;
