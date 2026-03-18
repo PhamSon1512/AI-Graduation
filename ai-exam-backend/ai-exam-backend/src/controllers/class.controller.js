@@ -290,6 +290,83 @@ const getClasses = async (req, res) => {
   }
 };
 
+const getPublicClasses = async (req, res) => {
+  try {
+    const { page = 1, limit = 20, search, teacherId, subjectId, schoolYear } = req.query;
+
+    const pageNum = parseInt(page);
+    const limitNum = Math.min(parseInt(limit), 50);
+    const skip = (pageNum - 1) * limitNum;
+
+    const where = {
+      isActive: true,
+      deletedAt: null
+    };
+
+    if (teacherId) {
+      where.teacherId = parseInt(teacherId);
+    }
+
+    if (subjectId) {
+      where.subjectId = parseInt(subjectId);
+    }
+
+    if (schoolYear) {
+      where.schoolYear = schoolYear;
+    }
+
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { code: { contains: search, mode: 'insensitive' } }
+      ];
+    }
+
+    const [classes, totalCount] = await Promise.all([
+      prisma.class.findMany({
+        where,
+        include: {
+          teacher: { select: { id: true, fullName: true } },
+          subject: { select: { id: true, code: true, name: true } },
+          _count: { select: { students: true } }
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limitNum
+      }),
+      prisma.class.count({ where })
+    ]);
+
+    res.json({
+      status: 'success',
+      data: {
+        classes: classes.map(c => ({
+          id: c.id,
+          name: c.name,
+          code: c.code,
+          description: c.description,
+          schoolYear: c.schoolYear,
+          teacher: c.teacher,
+          subject: c.subject,
+          studentCount: c._count?.students ?? 0
+        })),
+        pagination: {
+          currentPage: pageNum,
+          totalPages: Math.ceil(totalCount / limitNum),
+          totalCount,
+          limit: limitNum
+        }
+      }
+    });
+  } catch (error) {
+    console.error('GetPublicClasses error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Lỗi server khi lấy danh sách lớp public'
+    });
+  }
+};
+
 // @desc    Get class by ID with students
 // @route   GET /api/classes/:id
 // @access  Admin / Teacher (owner)
@@ -611,6 +688,7 @@ module.exports = {
   updateClass,
   deleteClass,
   getClasses,
+  getPublicClasses,
   getClassById,
   addStudentToClass,
   removeStudentFromClass,

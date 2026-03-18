@@ -5,33 +5,56 @@ const prisma = require('../config/prisma');
 // @access  Student
 const enrollInClass = async (req, res) => {
   try {
-    const { className } = req.body;
+    const { classId, className } = req.body;
     const studentId = req.user.id;
 
-    if (!className || !className.trim()) {
+    if (classId === undefined && (!className || !className.trim())) {
       return res.status(400).json({
         status: 'error',
-        message: 'Vui lòng nhập tên lớp học'
+        message: 'Vui lòng chọn lớp học'
       });
     }
 
-    // Find class by name (case-insensitive)
-    const classData = await prisma.class.findFirst({
-      where: {
-        name: { equals: className.trim(), mode: 'insensitive' },
-        isActive: true,
-        deletedAt: null
-      },
-      include: {
-        teacher: { select: { id: true, fullName: true } },
-        subject: { select: { id: true, name: true } }
+    let classData = null;
+
+    if (classId !== undefined && classId !== null) {
+      const parsedClassId = parseInt(classId);
+      if (!Number.isFinite(parsedClassId)) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'classId không hợp lệ'
+        });
       }
-    });
+
+      classData = await prisma.class.findFirst({
+        where: {
+          id: parsedClassId,
+          isActive: true,
+          deletedAt: null
+        },
+        include: {
+          teacher: { select: { id: true, fullName: true } },
+          subject: { select: { id: true, name: true } }
+        }
+      });
+    } else {
+      classData = await prisma.class.findFirst({
+        where: {
+          name: { equals: className.trim(), mode: 'insensitive' },
+          isActive: true,
+          deletedAt: null
+        },
+        include: {
+          teacher: { select: { id: true, fullName: true } },
+          subject: { select: { id: true, name: true } }
+        }
+      });
+    }
 
     if (!classData) {
       return res.status(404).json({
         status: 'error',
-        message: 'Không tìm thấy lớp học với tên này. Vui lòng kiểm tra lại.'
+        message: 'Không tìm thấy lớp học. Vui lòng kiểm tra lại.'
       });
     }
 

@@ -6,12 +6,15 @@ const {
   updateClass,
   deleteClass,
   getClasses,
+  getPublicClasses,
   getClassById,
   addStudentToClass,
   removeStudentFromClass,
   getClassResults
 } = require('../controllers/class.controller');
 const { getAssignmentsByClass } = require('../controllers/assignment.controller');
+
+router.get('/public', getPublicClasses);
 
 router.use(authenticate);
 
