@@ -3,6 +3,11 @@ const prisma = require('../config/prisma');
 
 const authenticate = async (req, res, next) => {
   try {
+    const requestPath = (req.originalUrl || '').split('?')[0];
+    if (req.method === 'GET' && requestPath === '/api/classes/public') {
+      return next();
+    }
+
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {

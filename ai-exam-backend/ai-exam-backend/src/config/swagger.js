@@ -2,6 +2,14 @@ const swaggerJsdoc = require('swagger-jsdoc');
 
 const getServers = () => {
   const servers = [];
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  // Development server
+  const port = process.env.PORT || 5000;
+  servers.push({
+    url: `http://localhost:${port}`,
+    description: 'Development server'
+  });
   
   // Production server (Render)
   if (process.env.RENDER_EXTERNAL_URL) {
@@ -19,13 +27,11 @@ const getServers = () => {
     });
   }
   
-  // Development server
-  const port = process.env.PORT || 5000;
-  servers.push({
-    url: `http://localhost:${port}`,
-    description: 'Development server'
-  });
-  
+  if (isProduction) {
+    const [dev, ...rest] = servers;
+    return [...rest, dev].filter(Boolean);
+  }
+
   return servers;
 };
 
