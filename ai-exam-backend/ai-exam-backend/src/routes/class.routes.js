@@ -14,6 +14,45 @@ const {
 } = require('../controllers/class.controller');
 const { getAssignmentsByClass } = require('../controllers/assignment.controller');
 
+/**
+ * @swagger
+ * /api/classes/public:
+ *   get:
+ *     summary: Danh sách lớp public (ai cũng xem được)
+ *     tags: [Classes]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *           maximum: 50
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Tìm theo tên hoặc mã lớp
+ *       - in: query
+ *         name: teacherId
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: subjectId
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: schoolYear
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Danh sách lớp public
+ */
 router.get('/public', getPublicClasses);
 
 router.use(authenticate);
