@@ -1,6 +1,7 @@
 const prisma = require('../config/prisma');
 const { ocrExamImage, ocrMultipleFiles, PHYSICS_12_TOPICS, BLOOM_LEVELS } = require('../services/ai.service');
-const { parseExcelFile, generateTemplateExcel, getTemplateInfo, QUESTION_TYPES } = require('../services/excel.service');
+const { parseExcelFile, generateTemplateExcel, getTemplateInfo } = require('../services/excel.service');
+const { QUESTION_TYPES, normalizeQuestionType } = require('../constants/questionTypes');
 const { uploadImage, isCloudinaryConfigured } = require('../config/cloudinary.config');
 
 // ==================== EXAM CRUD ====================
@@ -399,7 +400,7 @@ const deleteExam = async (req, res) => {
 const addQuestionToExam = async (req, res) => {
   try {
     const { examId } = req.params;
-    const { content_html, options, question_type, topic, bloom_level, correct_answer, explanation_html } = req.body;
+    const { content_html, options, question_type, topic, bloom_level, correct_answer, explanation_html, rounding_rule } = req.body;
 
     const exam = await prisma.exam.findUnique({
       where: { id: parseInt(examId) }
@@ -444,10 +445,11 @@ const addQuestionToExam = async (req, res) => {
         orderNumber: questionCount + 1,
         contentHtml: content_html,
         options: options || null,
-        questionType: QUESTION_TYPES.includes(question_type) ? question_type : 'trac_nghiem',
+        questionType: normalizeQuestionType(question_type),
         topic: topic || 'general',
         bloomLevel: BLOOM_LEVELS.includes(bloom_level) ? bloom_level : 'nhan_biet',
         correctAnswer: correct_answer || null,
+        roundingRule: rounding_rule || null,
         explanationHtml: explanation_html || null,
         isAiGenerated: false,
         status: 'draft',
@@ -542,10 +544,11 @@ const importQuestionsFromExcel = async (req, res) => {
           orderNumber: existingCount + index + 1,
           contentHtml: q.content_html,
           options: q.options,
-          questionType: q.question_type,
+          questionType: normalizeQuestionType(q.question_type),
           topic: q.topic || 'general',
           bloomLevel: q.bloom_level,
           correctAnswer: q.correct_answer,
+          roundingRule: q.rounding_rule || null,
           explanationHtml: q.explanation_html,
           isAiGenerated: false,
           status: 'draft',

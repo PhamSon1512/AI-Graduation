@@ -1,6 +1,6 @@
 const prisma = require('../config/prisma');
 const { BLOOM_LEVELS } = require('../services/ai.service');
-const { QUESTION_TYPES } = require('../services/excel.service');
+const { normalizeQuestionType } = require('../constants/questionTypes');
 
 // @desc    Get OCR session details
 // @route   GET /api/exams/:examId/ocr-sessions/:sessionId
@@ -265,10 +265,11 @@ const saveOcrQuestions = async (req, res) => {
           orderNumber: existingCount + index + 1,
           contentHtml: q.content_html,
           options: q.options || null,
-          questionType: q.question_type === 'tu_luan' ? 'tu_luan' : 'trac_nghiem',
+          questionType: normalizeQuestionType(q.question_type),
           topic: q.topic || 'general',
           bloomLevel: BLOOM_LEVELS.includes(q.bloom_level) ? q.bloom_level : 'nhan_biet',
           correctAnswer: q.correct_answer || null,
+          roundingRule: q.rounding_rule || null,
           explanationHtml: q.explanation_html || null,
           hasImage: q.has_image || false,
           imageUrl: q.page_image_url || null,

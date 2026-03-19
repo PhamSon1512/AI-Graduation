@@ -36,6 +36,10 @@ enum ExamStatus {
 enum QuestionType {
   trac_nghiem
   tu_luan
+  trac_nghiem_1_dap_an
+  trac_nghiem_nhieu_dap_an
+  trac_nghiem_dung_sai
+  trac_nghiem_tra_loi_ngan
 }
 
 enum QuestionStatus {
@@ -122,7 +126,8 @@ model Question {
   topic             String          @db.VarChar(100)
   subjectId         Int             @map("subject_id")
   bloomLevel        BloomLevel      @map("bloom_level")
-  correctAnswer     String?         @map("correct_answer") @db.VarChar(10)
+  correctAnswer     String?         @map("correct_answer") @db.VarChar(100)
+  roundingRule      String?         @map("rounding_rule") @db.VarChar(50)
   explanationHtml   String?         @map("explanation_html") @db.Text
   hasImage          Boolean         @default(false) @map("has_image")
   imageUrl          String?         @map("image_url") @db.VarChar(500)

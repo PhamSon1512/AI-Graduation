@@ -62,8 +62,14 @@ QUY TẮC BẮT BUỘC KHI TRẢ VỀ JSON:
 3. Ví dụ đúng: "content_html": "Phương trình x = 5cos(2πt) cm" hoặc "Tần số góc ω = 2π rad/s".
 4. Ví dụ sai: "content_html": "x = 5\\\\cos(2\\\\pi t)" (tránh backslash).
 
+HƯỚNG DẪN FORMAT THEO LOẠI CÂU HỎI:
+- Nếu loại "trắc nghiệm 4 đáp án": options: {"A":"...","B":"...","C":"...","D":"..."}, correct_answer: "A" hoặc "B" hoặc "C" hoặc "D"
+- Nếu loại "trắc nghiệm đúng sai": options: {"a":"phát biểu 1","b":"phát biểu 2","c":"phát biểu 3","d":"phát biểu 4"}, correct_answer: {"a":true,"b":false,"c":true,"d":false}
+- Nếu loại "trắc nghiệm trả lời ngắn": options: null, correct_answer: "42.5" (số)
+- Nếu loại "tự luận ngắn": options: null, correct_answer: "Nội dung đáp án/lời giải chi tiết..."
+
 TRẢ VỀ ĐÚNG FORMAT NÀY:
-{"questions":[{"content_html":"...","options":{"A":"...","B":"...","C":"...","D":"..."},"correct_answer":"A","explanation_html":"...","topic":"{topic}","bloom_level":"{bloomLevel}"}]}`;
+{"questions":[{"content_html":"...","options":{format_theo_loai},"correct_answer":{format_theo_loai},"explanation_html":"...","topic":"{topic}","bloom_level":"{bloomLevel}","question_type":"{questionTypeCode}"}]}`;
 
 const ANALYZE_EXAM_REQUEST_PROMPT = `Bạn là chuyên gia phân tích yêu cầu đề thi. Hãy phân tích yêu cầu sau và trả về cấu trúc đề thi.
 
@@ -222,12 +228,23 @@ const generateQuestions = async ({ subjectId, topic, bloomLevel, questionType = 
     throw new Error('Không tìm thấy môn học');
   }
 
+  const questionTypeLabels = {
+    'trac_nghiem_1_dap_an': 'trắc nghiệm 4 đáp án',
+    'trac_nghiem_nhieu_dap_an': 'trắc nghiệm nhiều đáp án đúng',
+    'trac_nghiem_dung_sai': 'trắc nghiệm đúng sai',
+    'trac_nghiem_tra_loi_ngan': 'trắc nghiệm trả lời ngắn',
+    'tu_luan': 'tự luận ngắn'
+  };
+  const qTypeLabel = questionTypeLabels[questionType] || 'trắc nghiệm 4 đáp án';
+  const qTypeCode = questionType || 'trac_nghiem_1_dap_an';
+
   const prompt = GENERATE_QUESTION_PROMPT
     .replace('{count}', count)
     .replace('{subject}', subject.name)
     .replace('{topic}', topic)
     .replace(/{bloomLevel}/g, bloomLevel)
-    .replace('{questionType}', questionType === 'tu_luan' ? 'tự luận ngắn' : 'trắc nghiệm 4 đáp án');
+    .replace('{questionType}', qTypeLabel)
+    .replace('{questionTypeCode}', qTypeCode);
 
   const maxRetries = 3;
   let lastError = null;

@@ -329,8 +329,11 @@ const getGenerationOptions = async (req, res) => {
           { value: 'van_dung_cao', label: 'Vận dụng cao', description: 'Bài tập phức tạp' }
         ],
         questionTypes: [
-          { value: 'trac_nghiem', label: 'Trắc nghiệm' },
-          { value: 'tu_luan', label: 'Tự luận ngắn' }
+          { value: 'trac_nghiem_1_dap_an', label: 'Phần I - Trắc nghiệm 1 đáp án đúng' },
+          { value: 'trac_nghiem_dung_sai', label: 'Phần II - Trắc nghiệm đúng sai' },
+          { value: 'trac_nghiem_tra_loi_ngan', label: 'Phần III - Trắc nghiệm trả lời ngắn' },
+          { value: 'tu_luan', label: 'Phần IV - Tự luận' },
+          { value: 'trac_nghiem_nhieu_dap_an', label: 'Trắc nghiệm nhiều đáp án đúng' }
         ],
         defaultTopics: [
           'dao_dong_co', 'song_co', 'dien_xoay_chieu', 

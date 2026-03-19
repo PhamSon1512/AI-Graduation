@@ -6,6 +6,7 @@ const {
   BLOOM_LEVELS,
   MODELS
 } = require('../config/ai.config');
+const { normalizeQuestionType } = require('../constants/questionTypes');
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
 
@@ -38,14 +39,10 @@ VÍ DỤ cho câu hỏi có hình biển báo:
       "content_html": "Nội dung câu hỏi (dùng LaTeX cho công thức: $v = \\\\omega A$)",
       "has_image": true/false,
       "image_description": "Mô tả chi tiết hình ảnh nếu có, null nếu không",
-      "question_type": "trac_nghiem hoặc tu_luan",
-      "options": {
-        "A": "Đáp án A (mô tả hình nếu đáp án là hình)",
-        "B": "Đáp án B",
-        "C": "Đáp án C",
-        "D": "Đáp án D"
-      },
-      "correct_answer": "QUAN TRỌNG: Chỉ điền A/B/C/D cho câu TRẮC NGHIỆM khi thấy đáp án trong đề. Với câu TỰ LUẬN (tu_luan) luôn để null vì AI không đảm bảo đáp án đúng cho tự luận.",
+      "question_type": "trac_nghiem_1_dap_an | trac_nghiem_nhieu_dap_an | trac_nghiem_dung_sai | trac_nghiem_tra_loi_ngan",
+      "options": "Xem hướng dẫn từng loại bên dưới",
+      "correct_answer": "Xem hướng dẫn từng loại bên dưới",
+      "rounding_rule": "Chỉ dùng cho trac_nghiem_tra_loi_ngan: integer | 1_decimal | 2_decimals",
       "topic": "một trong: ${PHYSICS_12_TOPICS.join(', ')}",
       "bloom_level": "một trong: ${BLOOM_LEVELS.join(', ')}",
       "explanation_html": "Lời giải nếu có, null nếu không"
@@ -73,7 +70,73 @@ Hướng dẫn xác định bloom_level:
 - nhan_biet: Nhớ công thức, định nghĩa đơn giản
 - thong_hieu: Giải thích, so sánh
 - van_dung: Bài tập tính toán cơ bản
-- van_dung_cao: Bài tập phức tạp, nhiều bước`;
+- van_dung_cao: Bài tập phức tạp, nhiều bước
+
+CÁCH PHÂN BIỆT CÁC PHẦN TRONG ĐỀ THI THPT:
+
+- "PHẦN I" hoặc "Câu trắc nghiệm nhiều phương án lựa chọn" → trac_nghiem_1_dap_an (chọn 1 trong A/B/C/D)
+- "PHẦN II" hoặc "Câu trắc nghiệm đúng sai" → trac_nghiem_dung_sai (4 phát biểu a,b,c,d - mỗi cái Đúng/Sai)
+- "PHẦN III" hoặc "Câu trắc nghiệm trả lời ngắn" → trac_nghiem_tra_loi_ngan (nhập số, có quy tắc làm tròn)
+- "PHẦN IV" hoặc "Câu tự luận" hoặc không có options A/B/C/D → tu_luan (đáp án là text dài, giải thích)
+
+HƯỚNG DẪN TỪNG LOẠI CÂU HỎI:
+
+1. trac_nghiem_1_dap_an (PHẦN I - Câu trắc nghiệm 1 đáp án):
+   - Nhận dạng: Có 4 đáp án A, B, C, D - chọn 1 đáp án đúng
+   - options: { "A": "...", "B": "...", "C": "...", "D": "..." }
+   - correct_answer: "A" hoặc "B" hoặc "C" hoặc "D"
+
+2. trac_nghiem_dung_sai (PHẦN II - Câu đúng sai):
+   - Nhận dạng: Có 4 phát biểu a), b), c), d) - xác định từng phát biểu ĐÚNG hay SAI
+   - Có thể nhiều phát biểu đúng (VD: b và c đều đúng)
+   - options: { "a": "nội dung phát biểu a", "b": "nội dung phát biểu b", "c": "nội dung phát biểu c", "d": "nội dung phát biểu d" }
+   - correct_answer: PHẢI là object JSON: {"a":false,"b":true,"c":true,"d":false}
+   - CHÚ Ý: KHÔNG được trả về dạng "B" hay "b" - phải trả về object JSON với 4 giá trị true/false
+
+3. trac_nghiem_tra_loi_ngan (PHẦN III - Trả lời ngắn, nhập số):
+   - Nhận dạng: Yêu cầu nhập số, thường có quy tắc làm tròn (số nguyên, 1-2 chữ số thập phân)
+   - options: null
+   - correct_answer: "42.5" (số đáp án, dạng string)
+   - rounding_rule: "integer" | "1_decimal" | "2_decimals" (theo yêu cầu trong đề)
+
+4. tu_luan (PHẦN IV - Câu tự luận):
+   - Nhận dạng: Câu hỏi mở, yêu cầu giải thích/chứng minh/tính toán chi tiết, không có options A/B/C/D
+   - options: null
+   - correct_answer: "Nội dung đáp án/lời giải chi tiết..." (text dài)
+   - Nếu đề không cho đáp án, correct_answer có thể để null hoặc gợi ý hướng giải
+
+5. trac_nghiem_nhieu_dap_an (Bổ sung - nhiều đáp án đúng):
+   - Nhận dạng: Có 4 đáp án A, B, C, D - chọn 1 HOẶC nhiều đáp án đúng
+   - options: { "A": "...", "B": "...", "C": "...", "D": "..." }
+   - correct_answer: "A,B,C" (các đáp án đúng cách nhau bởi dấu phẩy)
+
+VÍ DỤ CÂU ĐÚNG SAI (PHẦN II):
+Đề bài: "Hình bên mô phỏng thiết bị báo động nhiệt độ... Khi piston chạm vào vật M..."
+- a) Áp suất khí trong xi lanh lúc còi bắt đầu... → SAI
+- b) Nhiệt độ trong xi lanh khi còi bắt đầu phát ra âm thanh báo động là $87°C$ → ĐÚNG
+- c) Ban đầu áp suất khí trong xi lanh là $1,1.10^5$ Pa → ĐÚNG
+- d) Nhiệt độ trong xi lanh khi piston vừa tiếp xúc với vật nặng M là $47°C$ → SAI
+
+Kết quả:
+{
+  "question_type": "trac_nghiem_dung_sai",
+  "options": {
+    "a": "Áp suất khí trong xi lanh lúc còi bắt đầu phát ra âm thanh báo động là $1,3.10^5$ Pa.",
+    "b": "Nhiệt độ trong xi lanh khi còi bắt đầu phát ra âm thanh báo động là $87°C$.",
+    "c": "Ban đầu áp suất khí trong xi lanh là $1,1.10^5$ Pa.",
+    "d": "Nhiệt độ trong xi lanh khi piston vừa tiếp xúc với vật nặng M là $47°C$."
+  },
+  "correct_answer": {"a":false,"b":true,"c":true,"d":false}
+}
+
+VÍ DỤ CÂU TỰ LUẬN (PHẦN IV):
+Đề bài: "Chứng minh rằng trong dao động điều hòa, gia tốc luôn hướng về vị trí cân bằng."
+Kết quả:
+{
+  "question_type": "tu_luan",
+  "options": null,
+  "correct_answer": "Từ phương trình x = A.cos(ωt + φ), ta có: v = dx/dt = -Aω.sin(ωt + φ) và a = dv/dt = -Aω².cos(ωt + φ) = -ω²x. Vì ω² > 0 nên a và x luôn trái dấu, nghĩa là gia tốc luôn hướng về vị trí cân bằng (x = 0)."
+}`;
 
 const extractTextFromPdf = async (buffer) => {
   try {
@@ -186,17 +249,42 @@ const parseOcrResponse = (text) => {
 
   if (parsed.questions) {
     parsed.questions = parsed.questions.map((q, index) => {
-      const isTuLuan = q.question_type === 'tu_luan';
-      const correctAnswer = isTuLuan
-        ? null
-        : (q.correct_answer ? String(q.correct_answer).toUpperCase() : null);
+      const qType = normalizeQuestionType(q.question_type);
+      let correctAnswer = q.correct_answer;
+      
+      if (qType === 'trac_nghiem_1_dap_an' && correctAnswer) {
+        correctAnswer = String(correctAnswer).toUpperCase().charAt(0);
+      } else if (qType === 'trac_nghiem_nhieu_dap_an' && correctAnswer) {
+        correctAnswer = String(correctAnswer).replace(/\s/g, '').toUpperCase();
+      } else if (qType === 'trac_nghiem_dung_sai') {
+        if (typeof correctAnswer === 'object' && correctAnswer !== null) {
+          correctAnswer = JSON.stringify(correctAnswer);
+        } else if (typeof correctAnswer === 'string') {
+          try {
+            const parsed = JSON.parse(correctAnswer);
+            if (typeof parsed === 'object' && parsed !== null) {
+              correctAnswer = JSON.stringify(parsed);
+            }
+          } catch {
+            console.warn(`⚠️ Câu đúng sai có correct_answer không hợp lệ: "${correctAnswer}", tạo mặc định`);
+            correctAnswer = JSON.stringify({ a: false, b: false, c: false, d: false });
+          }
+        } else {
+          console.warn(`⚠️ Câu đúng sai thiếu correct_answer, tạo mặc định`);
+          correctAnswer = JSON.stringify({ a: false, b: false, c: false, d: false });
+        }
+      } else if (qType === 'trac_nghiem_tra_loi_ngan' && correctAnswer) {
+        correctAnswer = String(correctAnswer);
+      }
+      
       return {
         ...q,
         order_number: index + 1,
         topic: PHYSICS_12_TOPICS.includes(q.topic) ? q.topic : 'dao_dong_co',
         bloom_level: BLOOM_LEVELS.includes(q.bloom_level) ? q.bloom_level : 'nhan_biet',
-        question_type: isTuLuan ? 'tu_luan' : 'trac_nghiem',
+        question_type: qType,
         correct_answer: correctAnswer,
+        rounding_rule: q.rounding_rule || null,
         has_image: q.has_image || false,
         image_description: q.image_description || null
       };

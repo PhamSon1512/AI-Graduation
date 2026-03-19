@@ -1,7 +1,7 @@
 const XLSX = require('xlsx');
 
+const { QUESTION_TYPES, normalizeQuestionType } = require('../constants/questionTypes');
 const BLOOM_LEVELS = ['nhan_biet', 'thong_hieu', 'van_dung', 'van_dung_cao'];
-const QUESTION_TYPES = ['trac_nghiem', 'tu_luan'];
 
 const EXCEL_TEMPLATES = {
   template_1: {
@@ -175,21 +175,53 @@ const extractQuestionFromRow = (row, columnMapping, template, rowIndex) => {
     throw new Error('Nội dung câu hỏi trống');
   }
 
-  const questionType = getValue('question_type');
-  const isTuLuan = questionType && questionType.toLowerCase().includes('tu_luan');
+  const questionTypeRaw = getValue('question_type');
+  const questionType = normalizeQuestionType(questionTypeRaw || 'trac_nghiem_1_dap_an');
 
   const options = {};
-  const optionA = getValue('option_a');
-  const optionB = getValue('option_b');
-  const optionC = getValue('option_c');
-  const optionD = getValue('option_d');
+  let correctAnswer = getValue('correct_answer');
+  let roundingRule = getValue('rounding_rule') || null;
 
-  if (optionA) options.A = optionA;
-  if (optionB) options.B = optionB;
-  if (optionC) options.C = optionC;
-  if (optionD) options.D = optionD;
+  if (questionType === 'trac_nghiem_dung_sai') {
+    const optA = getValue('statement_a') || getValue('option_a');
+    const optB = getValue('statement_b') || getValue('option_b');
+    const optC = getValue('statement_c') || getValue('option_c');
+    const optD = getValue('statement_d') || getValue('option_d');
+    if (optA) options.a = optA;
+    if (optB) options.b = optB;
+    if (optC) options.c = optC;
+    if (optD) options.d = optD;
+    const ansA = getValue('answer_a');
+    const ansB = getValue('answer_b');
+    const ansC = getValue('answer_c');
+    const ansD = getValue('answer_d');
+    if (ansA !== undefined || ansB !== undefined || ansC !== undefined || ansD !== undefined) {
+      correctAnswer = JSON.stringify({
+        a: /true|dung|đúng|1/i.test(String(ansA || '')),
+        b: /true|dung|đúng|1/i.test(String(ansB || '')),
+        c: /true|dung|đúng|1/i.test(String(ansC || '')),
+        d: /true|dung|đúng|1/i.test(String(ansD || ''))
+      });
+    }
+  } else if (questionType === 'trac_nghiem_tra_loi_ngan') {
+    correctAnswer = correctAnswer || getValue('dap_an_so');
+    roundingRule = roundingRule || '1_decimal';
+  } else {
+    const optionA = getValue('option_a');
+    const optionB = getValue('option_b');
+    const optionC = getValue('option_c');
+    const optionD = getValue('option_d');
+    if (optionA) options.A = optionA;
+    if (optionB) options.B = optionB;
+    if (optionC) options.C = optionC;
+    if (optionD) options.D = optionD;
+    if (correctAnswer && questionType === 'trac_nghiem_nhieu_dap_an') {
+      correctAnswer = String(correctAnswer).replace(/\s/g, '').toUpperCase();
+    } else if (correctAnswer) {
+      correctAnswer = String(correctAnswer).toUpperCase().charAt(0);
+    }
+  }
 
-  const correctAnswer = getValue('correct_answer');
   if (!correctAnswer) {
     throw new Error('Thiếu đáp án đúng');
   }
@@ -208,8 +240,9 @@ const extractQuestionFromRow = (row, columnMapping, template, rowIndex) => {
     orderNumber: rowIndex,
     content_html: content,
     options: Object.keys(options).length > 0 ? options : null,
-    question_type: isTuLuan ? 'tu_luan' : 'trac_nghiem',
-    correct_answer: correctAnswer.toUpperCase(),
+    question_type: questionType,
+    correct_answer: correctAnswer,
+    rounding_rule: roundingRule,
     explanation_html: getValue('explanation') || null,
     bloom_level: bloomLevel,
     topic: getValue('topic') || null
@@ -271,5 +304,6 @@ module.exports = {
   generateTemplateExcel,
   getTemplateInfo,
   BLOOM_LEVELS,
-  QUESTION_TYPES
+  QUESTION_TYPES,
+  normalizeQuestionType
 };
