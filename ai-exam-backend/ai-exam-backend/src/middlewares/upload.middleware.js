@@ -36,9 +36,18 @@ const ALLOWED_MIMES = {
 const examFileFilter = (req, file, cb) => {
   if (ALLOWED_MIMES[file.mimetype]) {
     cb(null, true);
-  } else {
-    cb(new Error('Chỉ chấp nhận file: JPG, PNG, WebP, GIF, PDF, DOC, DOCX, XLS, XLSX'), false);
+    return;
   }
+  // Một số trình duyệt/OS gửi PDF/Office dưới dạng application/octet-stream
+  if (file.mimetype === 'application/octet-stream') {
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    const ok = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png', '.webp', '.gif'].includes(ext);
+    if (ok) {
+      cb(null, true);
+      return;
+    }
+  }
+  cb(new Error('Chỉ chấp nhận file: JPG, PNG, WebP, GIF, PDF, DOC, DOCX, XLS, XLSX'), false);
 };
 
 const uploadExamFiles = multer({

@@ -2,6 +2,7 @@ const {
   AI_PROVIDER,
   getGeminiModel,
   getGroqClient,
+  isGeminiConfigured,
   PHYSICS_12_TOPICS,
   BLOOM_LEVELS,
   MODELS
@@ -138,17 +139,27 @@ Kết quả:
   "correct_answer": "Từ phương trình x = A.cos(ωt + φ), ta có: v = dx/dt = -Aω.sin(ωt + φ) và a = dv/dt = -Aω².cos(ωt + φ) = -ω²x. Vì ω² > 0 nên a và x luôn trái dấu, nghĩa là gia tốc luôn hướng về vị trí cân bằng (x = 0)."
 }`;
 
+/** Giới hạn độ dài text gửi LLM (tránh vượt context / timeout) */
+const MAX_PDF_TEXT_CHARS = 120000;
+
 const extractTextFromPdf = async (buffer) => {
   let parser;
   try {
-    // pdf-parse v2+ exports PDFParse class; legacy `pdfParse(buffer)` no longer exists
-    parser = new PDFParse({ data: buffer });
+    // pdf-parse v2+ exports PDFParse class; TypedArray tránh lỗi worker/một số môi trường
+    const data = Buffer.isBuffer(buffer) ? new Uint8Array(buffer) : buffer;
+    parser = new PDFParse({ data });
     const result = await parser.getText();
-    const text = result?.text != null ? String(result.text).trim() : '';
+    let text = result?.text != null ? String(result.text).trim() : '';
     if (!text) {
       throw new Error(
         'PDF không trích xuất được chữ (thường gặp với file scan). Hãy upload ảnh từng trang hoặc PDF có lớp text.'
       );
+    }
+    if (text.length > MAX_PDF_TEXT_CHARS) {
+      console.warn(`⚠️ PDF text truncated: ${text.length} → ${MAX_PDF_TEXT_CHARS} chars`);
+      text =
+        text.slice(0, MAX_PDF_TEXT_CHARS) +
+        '\n\n[... phần sau đã bị cắt do giới hạn độ dài; có thể tách file hoặc upload ảnh trang ...]';
     }
     return text;
   } catch (error) {
@@ -263,16 +274,73 @@ const ocrWithGroq = async (fileBuffer, mimeType) => {
     max_tokens: isTextOnlyDoc ? 16000 : 8000
   });
 
-  return completion.choices[0]?.message?.content || '';
+  const content = completion?.choices?.[0]?.message?.content;
+  if (!content || !String(content).trim()) {
+    throw new Error('Groq không trả về nội dung. Thử lại hoặc kiểm tra model/API key.');
+  }
+  return String(content);
+};
+
+/**
+ * Trích object JSON từ text AI — không dùng regex greedy \{[\s\S]*\} vì dễ sai khi trong chuỗi có dấu } (LaTeX).
+ */
+const extractJsonObjectFromAiText = (raw) => {
+  if (!raw || typeof raw !== 'string') return null;
+  let s = raw.trim();
+  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) s = fence[1].trim();
+
+  if (s.startsWith('{')) {
+    try {
+      return JSON.parse(s);
+    } catch (_) {
+      /* thử cắt theo cặp ngoặc */
+    }
+  }
+
+  const start = s.indexOf('{');
+  if (start === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < s.length; i++) {
+    const c = s[i];
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (c === '\\' && inString) {
+      escape = true;
+      continue;
+    }
+    if (c === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (!inString) {
+      if (c === '{') depth++;
+      else if (c === '}') {
+        depth--;
+        if (depth === 0) {
+          const chunk = s.slice(start, i + 1);
+          try {
+            return JSON.parse(chunk);
+          } catch (e) {
+            throw new Error(`JSON từ AI không hợp lệ: ${e.message}`);
+          }
+        }
+      }
+    }
+  }
+  return null;
 };
 
 const parseOcrResponse = (text) => {
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
+  const parsed = extractJsonObjectFromAiText(text);
+  if (!parsed) {
     throw new Error('Không thể parse JSON từ response của AI');
   }
-
-  const parsed = JSON.parse(jsonMatch[0]);
 
   if (parsed.questions) {
     parsed.questions = parsed.questions.map((q, index) => {
@@ -344,8 +412,17 @@ const ocrExamImage = async (fileBuffer, mimeType = 'image/png') => {
       console.log('🖼️ Image detected → Using Groq Vision...');
       responseText = await ocrWithGroq(fileBuffer, mimeType);
     } else {
-      console.log('📄 Document detected → Using Groq...');
-      responseText = await ocrWithGroq(fileBuffer, mimeType);
+      console.log('📄 Document detected → Gemini (nếu có) rồi Groq...');
+      if (isGeminiConfigured()) {
+        try {
+          responseText = await ocrWithGemini(fileBuffer, mimeType);
+        } catch (gemErr) {
+          console.error('❌ Gemini document OCR failed:', gemErr.message);
+          responseText = await ocrWithGroq(fileBuffer, mimeType);
+        }
+      } else {
+        responseText = await ocrWithGroq(fileBuffer, mimeType);
+      }
     }
 
     return parseOcrResponse(responseText);

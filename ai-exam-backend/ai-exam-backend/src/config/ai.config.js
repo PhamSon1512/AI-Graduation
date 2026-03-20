@@ -62,9 +62,13 @@ const getGroqClient = () => {
 
 console.log(`🤖 AI Provider: ${AI_PROVIDER.toUpperCase()}`);
 
+/** true nếu có thể gọi Gemini (tránh throw khi chỉ kiểm tra tồn tại client) */
+const isGeminiConfigured = () => Boolean(geminiClient && GEMINI_API_KEY);
+
 module.exports = {
   AI_PROVIDER,
   geminiClient,
+  isGeminiConfigured,
   groqClient,
   getProvider,
   getGeminiModel,

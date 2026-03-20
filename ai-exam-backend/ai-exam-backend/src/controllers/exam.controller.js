@@ -1,3 +1,4 @@
+const path = require('path');
 const prisma = require('../config/prisma');
 const { ocrExamImage, ocrMultipleFiles, PHYSICS_12_TOPICS, BLOOM_LEVELS } = require('../services/ai.service');
 const { parseExcelFile, generateTemplateExcel, getTemplateInfo } = require('../services/excel.service');
@@ -581,6 +582,19 @@ const importQuestionsFromExcel = async (req, res) => {
   }
 };
 
+/** Chuẩn hoá MIME khi trình duyệt gửi application/octet-stream */
+const normalizeExamUploadMime = (file) => {
+  const ext = path.extname(file.originalname || '').toLowerCase();
+  if (file.mimetype === 'application/octet-stream') {
+    if (ext === '.pdf') return 'application/pdf';
+    if (ext === '.doc') return 'application/msword';
+    if (ext === '.docx') {
+      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    }
+  }
+  return file.mimetype;
+};
+
 // @desc    OCR questions from image/pdf
 // @route   POST /api/exams/:examId/questions/ocr
 // @access  Teacher (owner)
@@ -621,11 +635,13 @@ const ocrQuestionsForExam = async (req, res) => {
       });
     }
 
+    const filesNorm = files.map((f) => ({ ...f, mimetype: normalizeExamUploadMime(f) }));
+
     let ocrResult;
-    if (files.length === 1) {
-      ocrResult = await ocrExamImage(files[0].buffer, files[0].mimetype);
+    if (filesNorm.length === 1) {
+      ocrResult = await ocrExamImage(filesNorm[0].buffer, filesNorm[0].mimetype);
     } else {
-      ocrResult = await ocrMultipleFiles(files);
+      ocrResult = await ocrMultipleFiles(filesNorm);
     }
 
     if (!ocrResult.questions || ocrResult.questions.length === 0) {
@@ -635,13 +651,15 @@ const ocrQuestionsForExam = async (req, res) => {
       });
     }
 
+    const rawQuestionsJson = JSON.parse(JSON.stringify(ocrResult.questions));
+
     const ocrSession = await prisma.ocrSession.create({
       data: {
         examId: parseInt(examId),
         teacherId: req.user.id,
-        fileName: files.map(f => f.originalname).join(', '),
-        fileType: files[0].mimetype,
-        rawQuestions: ocrResult.questions,
+        fileName: filesNorm.map((f) => f.originalname).join(', '),
+        fileType: filesNorm[0].mimetype,
+        rawQuestions: rawQuestionsJson,
         status: 'pending_review'
       }
     });

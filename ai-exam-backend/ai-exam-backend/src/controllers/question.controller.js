@@ -1,6 +1,19 @@
+const path = require('path');
 const prisma = require('../config/prisma');
 const { ocrExamImage, ocrMultipleFiles, generateExplanation, PHYSICS_12_TOPICS, BLOOM_LEVELS } = require('../services/ai.service');
 const fs = require('fs');
+
+const normalizeExamUploadMime = (file) => {
+  const ext = path.extname(file.originalname || '').toLowerCase();
+  if (file.mimetype === 'application/octet-stream') {
+    if (ext === '.pdf') return 'application/pdf';
+    if (ext === '.doc') return 'application/msword';
+    if (ext === '.docx') {
+      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    }
+  }
+  return file.mimetype;
+};
 
 // @desc    OCR - Trích xuất câu hỏi từ file đề thi (hỗ trợ nhiều file, nhiều định dạng)
 // @route   POST /api/questions/ocr
@@ -16,22 +29,24 @@ const ocrExamImageHandler = async (req, res) => {
       });
     }
 
+    const filesNorm = files.map((f) => ({ ...f, mimetype: normalizeExamUploadMime(f) }));
+
     let result;
-    
-    if (files.length === 1) {
-      result = await ocrExamImage(files[0].buffer, files[0].mimetype);
+
+    if (filesNorm.length === 1) {
+      result = await ocrExamImage(filesNorm[0].buffer, filesNorm[0].mimetype);
       result.metadata = {
         ...result.metadata,
         files_processed: 1,
         total_questions: result.questions?.length || 0
       };
     } else {
-      result = await ocrMultipleFiles(files);
+      result = await ocrMultipleFiles(filesNorm);
     }
 
     res.json({
       status: 'success',
-      message: `Trích xuất thành công ${result.questions?.length || 0} câu hỏi từ ${files.length} file`,
+      message: `Trích xuất thành công ${result.questions?.length || 0} câu hỏi từ ${filesNorm.length} file`,
       data: result
     });
   } catch (error) {
