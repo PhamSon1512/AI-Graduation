@@ -7,7 +7,7 @@ const {
   MODELS
 } = require('../config/ai.config');
 const { normalizeQuestionType } = require('../constants/questionTypes');
-const pdfParse = require('pdf-parse');
+const { PDFParse } = require('pdf-parse');
 const mammoth = require('mammoth');
 
 const OCR_EXAM_PROMPT = `Bạn là chuyên gia OCR đề thi. Hãy trích xuất TẤT CẢ câu hỏi từ nội dung này.
@@ -139,12 +139,30 @@ Kết quả:
 }`;
 
 const extractTextFromPdf = async (buffer) => {
+  let parser;
   try {
-    const data = await pdfParse(buffer);
-    return data.text;
+    // pdf-parse v2+ exports PDFParse class; legacy `pdfParse(buffer)` no longer exists
+    parser = new PDFParse({ data: buffer });
+    const result = await parser.getText();
+    const text = result?.text != null ? String(result.text).trim() : '';
+    if (!text) {
+      throw new Error(
+        'PDF không trích xuất được chữ (thường gặp với file scan). Hãy upload ảnh từng trang hoặc PDF có lớp text.'
+      );
+    }
+    return text;
   } catch (error) {
     console.error('PDF Parse Error:', error);
-    throw new Error('Không thể đọc file PDF');
+    const msg = error?.message || 'Không thể đọc file PDF';
+    throw new Error(msg);
+  } finally {
+    if (parser?.destroy) {
+      try {
+        await parser.destroy();
+      } catch (_) {
+        /* ignore */
+      }
+    }
   }
 };
 
@@ -159,7 +177,11 @@ const extractTextFromWord = async (buffer) => {
 };
 
 const ocrWithGemini = async (fileBuffer, mimeType) => {
-  const model = getGeminiModel('vision');
+  const isDocText =
+    mimeType === 'application/pdf' ||
+    mimeType === 'application/msword' ||
+    mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  const model = getGeminiModel(isDocText ? 'text' : 'vision');
   let content = [];
 
   if (mimeType === 'application/pdf') {
@@ -229,11 +251,16 @@ const ocrWithGroq = async (fileBuffer, mimeType) => {
     ];
   }
 
+  const isTextOnlyDoc =
+    mimeType === 'application/pdf' ||
+    mimeType === 'application/msword' ||
+    mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
   const completion = await groq.chat.completions.create({
-    model: MODELS.groq.vision,
+    model: isTextOnlyDoc ? MODELS.groq.text : MODELS.groq.vision,
     messages: messages,
     temperature: 0.1,
-    max_tokens: 8000
+    max_tokens: isTextOnlyDoc ? 16000 : 8000
   });
 
   return completion.choices[0]?.message?.content || '';
