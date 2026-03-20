@@ -12,6 +12,11 @@ const mammoth = require('mammoth');
 
 const OCR_EXAM_PROMPT = `Bạn là chuyên gia OCR đề thi. Hãy trích xuất TẤT CẢ câu hỏi từ nội dung này.
 
+QUAN TRỌNG — ĐÁP ÁN (KHÔNG ĐƯỢC BỎ TRỐNG):
+- Với trắc nghiệm một đáp án (4 phương án A/B/C/D): trường correct_answer PHẢI luôn là đúng MỘT chữ "A", "B", "C" hoặc "D" (string).
+- Tìm đáp án trong đề: "Đáp án:", "Đ/S:", "Key:", dấu * hoặc gạch chân tại phương án đúng, chữ khoanh tròn, bảng đáp án, hoặc "(Đáp án đúng)" cạnh phương án.
+- Nếu đề không in rõ đáp án: dùng kiến thức Vật lý 12 để chọn phương án đúng nhất và ghi một dòng trong explanation_html: "Đáp án suy luận (đề không in key rõ)."
+
 QUAN TRỌNG VỀ HÌNH ẢNH:
 - Nếu câu hỏi có hình ảnh (biển báo, sơ đồ, đồ thị, hình vẽ), hãy MÔ TẢ CHI TIẾT hình ảnh đó
 - Đặt has_image: true và điền image_description
@@ -102,8 +107,7 @@ HƯỚNG DẪN TỪNG LOẠI CÂU HỎI:
 4. tu_luan (PHẦN IV - Câu tự luận):
    - Nhận dạng: Câu hỏi mở, yêu cầu giải thích/chứng minh/tính toán chi tiết, không có options A/B/C/D
    - options: null
-   - correct_answer: "Nội dung đáp án/lời giải chi tiết..." (text dài)
-   - Nếu đề không cho đáp án, correct_answer có thể để null hoặc gợi ý hướng giải
+   - correct_answer: luôn điền nội dung — nếu đề có lời giải thì copy; nếu không có thì viết lời giải gợi ý ngắn (không để null hoặc chuỗi rỗng)
 
 5. trac_nghiem_nhieu_dap_an (Bổ sung - nhiều đáp án đúng):
    - Nhận dạng: Có 4 đáp án A, B, C, D - chọn 1 HOẶC nhiều đáp án đúng
@@ -143,6 +147,7 @@ const OCR_OUTPUT_JSON_ONLY = `
 
 === ĐẦU RA (bắt buộc) ===
 Trả về MỘT object JSON hợp lệ duy nhất với khóa "questions" (mảng) và "metadata" (object).
+Mỗi phần tử questions có trắc nghiệm 4 lựa chọn PHẢI có correct_answer là "A"|"B"|"C"|"D".
 Không dùng markdown, không bọc \`\`\`, không thêm lời giải thích trước hoặc sau JSON.`;
 
 /** Giới hạn độ dài text gửi LLM (tránh vượt context / timeout) */
@@ -250,13 +255,15 @@ const ocrWithGemini = async (fileBuffer, mimeType) => {
     const text = await extractTextFromWord(fileBuffer);
     content = [OCR_EXAM_PROMPT + '\n\nNội dung đề thi:\n' + text];
   } else {
+    const visionTail =
+      '\n\n(Lưu ý khi đọc ảnh đề: mỗi câu trắc nghiệm A–D phải có correct_answer là "A","B","C" hoặc "D"; không để trống.)';
     const imagePart = {
       inlineData: {
         data: fileBuffer.toString('base64'),
         mimeType: mimeType
       }
     };
-    content = [OCR_EXAM_PROMPT, imagePart];
+    content = [OCR_EXAM_PROMPT + visionTail, imagePart];
   }
 
   const result = await model.generateContent(content);
@@ -314,13 +321,15 @@ const ocrWithGroq = async (fileBuffer, mimeType) => {
     const base64Image = fileBuffer.toString('base64');
     const imageUrl = `data:${mimeType};base64,${base64Image}`;
 
+    const visionPromptTail =
+      '\n\n(Lưu ý khi đọc ảnh đề: với mỗi câu trắc nghiệm 4 phương án, trường correct_answer PHẢI là đúng một chữ "A", "B", "C" hoặc "D" — tìm dấu * / gạch chân / "Đáp án" trên ảnh; không để trống.)';
     messages = [
       {
         role: 'user',
         content: [
           {
             type: 'text',
-            text: OCR_EXAM_PROMPT
+            text: OCR_EXAM_PROMPT + visionPromptTail
           },
           {
             type: 'image_url',
@@ -423,6 +432,32 @@ const extractJsonObjectFromAiText = (raw) => {
   return null;
 };
 
+/** Đoán A-D từ chữ in trong đề (đáp án, key, khoanh tròn...) */
+const guessABCDFromQuestionBlob = (q) => {
+  const parts = [
+    q.content_html,
+    q.contentHtml,
+    ...Object.values(q.options || {})
+  ]
+    .filter(Boolean)
+    .map((x) => String(x));
+  const blob = parts.join('\n');
+  const patterns = [
+    /(?:đáp\s*án|dap\s*an|đ\s*\/\s*s|D\/S|key)\s*[:\.]?\s*([ABCD])\b/i,
+    /\bchọn\s*(?:phương\s*án\s*)?([ABCD])\b/i,
+    /\(([ABCD])\)\s*(?:là\s*)?(?:đúng|dap an dung)/i,
+    /(?:đáp\s*án\s*đúng|phương\s*án\s*đúng)\s*[:\.]?\s*([ABCD])\b/i,
+    /\*\s*([ABCD])\s*\*\s*(?:đúng|\(đúng)/i,
+    /【\s*([ABCD])\s*】/i,
+    /(?:^|[\s.])Đ\s*[:.]\s*([ABCD])\b/im
+  ];
+  for (const re of patterns) {
+    const m = blob.match(re);
+    if (m && m[1]) return String(m[1]).toUpperCase().charAt(0);
+  }
+  return null;
+};
+
 const parseOcrResponse = (text) => {
   let parsed = extractJsonObjectFromAiText(text);
   if (!parsed) {
@@ -442,8 +477,14 @@ const parseOcrResponse = (text) => {
       const qType = normalizeQuestionType(q.question_type);
       let correctAnswer = q.correct_answer;
       
-      if (qType === 'trac_nghiem_1_dap_an' && correctAnswer) {
-        correctAnswer = String(correctAnswer).toUpperCase().charAt(0);
+      if (qType === 'trac_nghiem_1_dap_an') {
+        let letter = null;
+        if (correctAnswer != null && String(correctAnswer).trim() !== '') {
+          const ch = String(correctAnswer).toUpperCase().trim().charAt(0);
+          if (['A', 'B', 'C', 'D'].includes(ch)) letter = ch;
+        }
+        if (!letter) letter = guessABCDFromQuestionBlob(q);
+        correctAnswer = letter;
       } else if (qType === 'trac_nghiem_nhieu_dap_an' && correctAnswer) {
         correctAnswer = String(correctAnswer).replace(/\s/g, '').toUpperCase();
       } else if (qType === 'trac_nghiem_dung_sai') {
@@ -484,14 +525,104 @@ const parseOcrResponse = (text) => {
   return parsed;
 };
 
+/**
+ * Sau OCR: câu trắc nghiệm 1 đáp án vẫn thiếu A–D → Groq suy luận; nếu vẫn thiếu → gán A + ghi chú.
+ */
+const enrichOcrQuestionsWithMissingAnswers = async (parsed) => {
+  if (!parsed?.questions?.length) return;
+
+  const needGroq = [];
+  parsed.questions.forEach((q, idx) => {
+    const qType = normalizeQuestionType(q.question_type);
+    if (qType !== 'trac_nghiem_1_dap_an') return;
+    const ca = q.correct_answer;
+    const ok =
+      ca != null &&
+      String(ca).trim() !== '' &&
+      ['A', 'B', 'C', 'D'].includes(String(ca).trim().toUpperCase().charAt(0));
+    if (!ok) {
+      needGroq.push({
+        i: idx,
+        content_html: String(q.content_html || q.contentHtml || '').slice(0, 1400),
+        options: q.options || {}
+      });
+    }
+  });
+
+  if (needGroq.length > 0) {
+    try {
+      const groq = getGroqClient();
+      const completion = await groq.chat.completions.create({
+        model: MODELS.groq.text,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'Bạn là giáo viên Vật lý 12. Input là JSON mảng các object {i, content_html, options}. Mỗi câu là trắc nghiệm 4 phương án A-D nhưng thiếu đáp án. Trả về CHỈ một JSON: {"items":[{"i":number,"correct_answer":"A"|"B"|"C"|"D"}]}. Trường i phải khớp input. Chọn đáp án đúng theo vật lý nếu đề không ghi key.'
+          },
+          { role: 'user', content: JSON.stringify(needGroq) }
+        ],
+        temperature: 0.15,
+        max_tokens: 4000,
+        response_format: { type: 'json_object' }
+      });
+      const raw = completion?.choices?.[0]?.message?.content;
+      if (raw) {
+        const fill = extractJsonObjectFromAiText(String(raw));
+        const items = fill?.items;
+        if (Array.isArray(items)) {
+          for (const it of items) {
+            const idx = typeof it.i === 'number' ? it.i : parseInt(it.i, 10);
+            const letter = String(it.correct_answer ?? it.answer ?? '')
+              .trim()
+              .toUpperCase()
+              .charAt(0);
+            if (!Number.isInteger(idx) || idx < 0 || idx >= parsed.questions.length) continue;
+            if (!['A', 'B', 'C', 'D'].includes(letter)) continue;
+            parsed.questions[idx].correct_answer = letter;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('enrichOcrQuestionsWithMissingAnswers (Groq):', e.message);
+    }
+  }
+
+  parsed.questions.forEach((q) => {
+    const qType = normalizeQuestionType(q.question_type);
+    if (qType === 'trac_nghiem_1_dap_an') {
+      const ca = q.correct_answer;
+      const ok =
+        ca != null &&
+        String(ca).trim() !== '' &&
+        ['A', 'B', 'C', 'D'].includes(String(ca).trim().toUpperCase().charAt(0));
+      if (!ok) {
+        q.correct_answer = 'A';
+        const note =
+          '<p><em>[Hệ thống: chưa xác định được đáp án từ đề — tạm gán A; giáo viên vui lòng sửa.]</em></p>';
+        q.explanation_html = q.explanation_html ? `${q.explanation_html}${note}` : note;
+      } else {
+        q.correct_answer = String(ca).trim().toUpperCase().charAt(0);
+      }
+    }
+    if (qType === 'tu_luan' && (q.correct_answer == null || String(q.correct_answer).trim() === '')) {
+      q.correct_answer =
+        '(Chưa có đáp án trong đề — giáo viên vui lòng nhập lời giải / đáp án tự luận.)';
+    }
+  });
+};
+
 const parseOcrResponseWithRepair = async (responseText) => {
+  let parsed;
   try {
-    return parseOcrResponse(responseText);
+    parsed = parseOcrResponse(responseText);
   } catch (parseErr) {
     console.warn('⚠️ Parse JSON lần 1 thất bại, sửa JSON (Groq 70B)...', parseErr.message);
     const repaired = await repairOcrJsonWithGroq(responseText);
-    return parseOcrResponse(repaired);
+    parsed = parseOcrResponse(repaired);
   }
+  await enrichOcrQuestionsWithMissingAnswers(parsed);
+  return parsed;
 };
 
 /** Groq: đã có sẵn chuỗi nội dung đề (từ PDF text / nguồn khác) */
@@ -584,6 +715,8 @@ const ocrPdfViaRenderedPages = async (buffer) => {
         'Không trích được câu từ PDF (không đủ lớp text và không đọc được nội dung qua ảnh trang). Thử PDF khác hoặc tách ảnh từng trang upload riêng.'
       );
     }
+
+    await enrichOcrQuestionsWithMissingAnswers({ questions: merged, metadata });
 
     merged.forEach((q, i) => {
       q.order_number = i + 1;
