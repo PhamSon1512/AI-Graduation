@@ -2,7 +2,6 @@ const {
   AI_PROVIDER,
   getGeminiModel,
   getGroqClient,
-  isGeminiConfigured,
   PHYSICS_12_TOPICS,
   BLOOM_LEVELS,
   MODELS
@@ -139,8 +138,28 @@ Kết quả:
   "correct_answer": "Từ phương trình x = A.cos(ωt + φ), ta có: v = dx/dt = -Aω.sin(ωt + φ) và a = dv/dt = -Aω².cos(ωt + φ) = -ω²x. Vì ω² > 0 nên a và x luôn trái dấu, nghĩa là gia tốc luôn hướng về vị trí cân bằng (x = 0)."
 }`;
 
+/** Ghép vào cuối prompt khi gửi PDF/Word cho Groq — buộc chỉ trả JSON */
+const OCR_OUTPUT_JSON_ONLY = `
+
+=== ĐẦU RA (bắt buộc) ===
+Trả về MỘT object JSON hợp lệ duy nhất với khóa "questions" (mảng) và "metadata" (object).
+Không dùng markdown, không bọc \`\`\`, không thêm lời giải thích trước hoặc sau JSON.`;
+
 /** Giới hạn độ dài text gửi LLM (tránh vượt context / timeout) */
 const MAX_PDF_TEXT_CHARS = 120000;
+/** Đủ ký tự text trong PDF → dùng luồng text (nhanh). Dưới ngưỡng → coi như scan, render từng trang. */
+const MIN_PDF_TEXT_USE_TEXT_PATH = Math.max(
+  40,
+  parseInt(process.env.MIN_PDF_TEXT_FOR_OCR || '120', 10)
+);
+const MAX_PDF_PAGES_RENDER_OCR = Math.min(
+  60,
+  Math.max(1, parseInt(process.env.MAX_PDF_PAGES_OCR || '30', 10))
+);
+const PDF_PAGE_OCR_DELAY_MS = Math.max(
+  0,
+  parseInt(process.env.PDF_PAGE_OCR_DELAY_MS || '1200', 10)
+);
 
 const extractTextFromPdf = async (buffer) => {
   let parser;
@@ -166,6 +185,34 @@ const extractTextFromPdf = async (buffer) => {
     console.error('PDF Parse Error:', error);
     const msg = error?.message || 'Không thể đọc file PDF';
     throw new Error(msg);
+  } finally {
+    if (parser?.destroy) {
+      try {
+        await parser.destroy();
+      } catch (_) {
+        /* ignore */
+      }
+    }
+  }
+};
+
+/** Trích text PDF, không ném lỗi (dùng để quyết định text vs render trang). */
+const tryExtractPdfText = async (buffer) => {
+  let parser;
+  try {
+    const data = Buffer.isBuffer(buffer) ? new Uint8Array(buffer) : buffer;
+    parser = new PDFParse({ data });
+    const result = await parser.getText();
+    let text = result?.text != null ? String(result.text).trim() : '';
+    if (text.length > MAX_PDF_TEXT_CHARS) {
+      text =
+        text.slice(0, MAX_PDF_TEXT_CHARS) +
+        '\n\n[... phần sau đã bị cắt do giới hạn độ dài ...]';
+    }
+    return text;
+  } catch (e) {
+    console.warn('tryExtractPdfText:', e?.message || e);
+    return '';
   } finally {
     if (parser?.destroy) {
       try {
@@ -217,26 +264,50 @@ const ocrWithGemini = async (fileBuffer, mimeType) => {
   return response.text();
 };
 
+const repairOcrJsonWithGroq = async (brokenText) => {
+  const groq = getGroqClient();
+  const snippet = String(brokenText).slice(0, 120000);
+  const completion = await groq.chat.completions.create({
+    model: MODELS.groq.text,
+    messages: [
+      {
+        role: 'system',
+        content:
+          'You output ONLY one valid JSON object. Top-level keys must be "questions" (array of question objects) and "metadata" (object). No markdown, no code fences, no commentary.'
+      },
+      {
+        role: 'user',
+        content: `The following text was supposed to be JSON but may be broken or wrapped in prose. Extract or fix into one valid JSON object.\n\n---\n${snippet}\n---`
+      }
+    ],
+    temperature: 0,
+    max_tokens: 16384,
+    response_format: { type: 'json_object' }
+  });
+  const c = completion?.choices?.[0]?.message?.content;
+  if (!c || !String(c).trim()) {
+    throw new Error('Bước sửa JSON: Groq không trả nội dung');
+  }
+  return String(c);
+};
+
 const ocrWithGroq = async (fileBuffer, mimeType) => {
   const groq = getGroqClient();
 
   let messages = [];
 
-  if (mimeType === 'application/pdf') {
-    const text = await extractTextFromPdf(fileBuffer);
-    messages = [
-      {
-        role: 'user',
-        content: OCR_EXAM_PROMPT + '\n\nNội dung đề thi:\n' + text
-      }
-    ];
-  } else if (mimeType === 'application/msword' ||
+  if (mimeType === 'application/msword' ||
     mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
     const text = await extractTextFromWord(fileBuffer);
     messages = [
       {
+        role: 'system',
+        content:
+          'Bạn trích xuất câu hỏi trắc nghiệm từ đề thi. Trả lời CHỈ bằng một object JSON hợp lệ. Không markdown.'
+      },
+      {
         role: 'user',
-        content: OCR_EXAM_PROMPT + '\n\nNội dung đề thi:\n' + text
+        content: OCR_EXAM_PROMPT + '\n\nNội dung đề thi:\n' + text + OCR_OUTPUT_JSON_ONLY
       }
     ];
   } else {
@@ -263,16 +334,32 @@ const ocrWithGroq = async (fileBuffer, mimeType) => {
   }
 
   const isTextOnlyDoc =
-    mimeType === 'application/pdf' ||
     mimeType === 'application/msword' ||
     mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-  const completion = await groq.chat.completions.create({
-    model: isTextOnlyDoc ? MODELS.groq.text : MODELS.groq.vision,
-    messages: messages,
-    temperature: 0.1,
+  const model = isTextOnlyDoc ? MODELS.groq.textOcrFast : MODELS.groq.vision;
+
+  const basePayload = {
+    model,
+    messages,
+    temperature: isTextOnlyDoc ? 0.05 : 0.1,
     max_tokens: isTextOnlyDoc ? 16000 : 8000
-  });
+  };
+
+  let completion;
+  if (isTextOnlyDoc) {
+    try {
+      completion = await groq.chat.completions.create({
+        ...basePayload,
+        response_format: { type: 'json_object' }
+      });
+    } catch (e) {
+      console.warn('⚠️ Groq json_object không khả dụng, thử lại không ràng buộc:', e.message);
+      completion = await groq.chat.completions.create(basePayload);
+    }
+  } else {
+    completion = await groq.chat.completions.create(basePayload);
+  }
 
   const content = completion?.choices?.[0]?.message?.content;
   if (!content || !String(content).trim()) {
@@ -286,7 +373,7 @@ const ocrWithGroq = async (fileBuffer, mimeType) => {
  */
 const extractJsonObjectFromAiText = (raw) => {
   if (!raw || typeof raw !== 'string') return null;
-  let s = raw.trim();
+  let s = raw.trim().replace(/^\uFEFF/, '');
   const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fence) s = fence[1].trim();
 
@@ -337,9 +424,17 @@ const extractJsonObjectFromAiText = (raw) => {
 };
 
 const parseOcrResponse = (text) => {
-  const parsed = extractJsonObjectFromAiText(text);
+  let parsed = extractJsonObjectFromAiText(text);
   if (!parsed) {
+    console.error('OCR parse fail — raw head:', String(text).slice(0, 800));
     throw new Error('Không thể parse JSON từ response của AI');
+  }
+
+  if (Array.isArray(parsed)) {
+    parsed = {
+      questions: parsed,
+      metadata: { total_questions: parsed.length, subject: 'Vật Lý 12' }
+    };
   }
 
   if (parsed.questions) {
@@ -389,14 +484,146 @@ const parseOcrResponse = (text) => {
   return parsed;
 };
 
+const parseOcrResponseWithRepair = async (responseText) => {
+  try {
+    return parseOcrResponse(responseText);
+  } catch (parseErr) {
+    console.warn('⚠️ Parse JSON lần 1 thất bại, sửa JSON (Groq 70B)...', parseErr.message);
+    const repaired = await repairOcrJsonWithGroq(responseText);
+    return parseOcrResponse(repaired);
+  }
+};
+
+/** Groq: đã có sẵn chuỗi nội dung đề (từ PDF text / nguồn khác) */
+const groqOcrExamFromExtractedText = async (examText) => {
+  const groq = getGroqClient();
+  const messages = [
+    {
+      role: 'system',
+      content:
+        'Bạn trích xuất câu hỏi trắc nghiệm từ đề thi. Trả lời CHỈ bằng một object JSON hợp lệ (theo hướng dẫn của user). Không markdown.'
+    },
+    {
+      role: 'user',
+      content: OCR_EXAM_PROMPT + '\n\nNội dung đề thi:\n' + examText + OCR_OUTPUT_JSON_ONLY
+    }
+  ];
+  const basePayload = {
+    model: MODELS.groq.textOcrFast,
+    messages,
+    temperature: 0.05,
+    max_tokens: 16000
+  };
+  let completion;
+  try {
+    completion = await groq.chat.completions.create({
+      ...basePayload,
+      response_format: { type: 'json_object' }
+    });
+  } catch (e) {
+    console.warn('⚠️ Groq json_object không khả dụng, thử lại không ràng buộc:', e.message);
+    completion = await groq.chat.completions.create(basePayload);
+  }
+  const content = completion?.choices?.[0]?.message?.content;
+  if (!content || !String(content).trim()) {
+    throw new Error('Groq không trả về nội dung. Thử lại hoặc kiểm tra API key.');
+  }
+  return String(content);
+};
+
+/**
+ * PDF scan / ít text: render từng trang → PNG (pdf-parse) → Groq vision → gộp câu hỏi.
+ */
+const ocrPdfViaRenderedPages = async (buffer) => {
+  const data = Buffer.isBuffer(buffer) ? new Uint8Array(buffer) : buffer;
+  let parser;
+  const merged = [];
+  const metadata = {
+    subject: 'Vật Lý 12',
+    pdf_rendered_pages: true,
+    total_questions: 0,
+    has_images: true
+  };
+  try {
+    parser = new PDFParse({ data });
+    const info = await parser.getInfo();
+    const total = Math.min(info.total || 1, MAX_PDF_PAGES_RENDER_OCR);
+    console.log(`📑 PDF (ảnh từng trang): ${total} trang, scale 1.25, delay ${PDF_PAGE_OCR_DELAY_MS}ms`);
+
+    for (let page = 1; page <= total; page++) {
+      const shot = await parser.getScreenshot({
+        partial: [page],
+        scale: 1.25,
+        imageBuffer: true,
+        imageDataUrl: false
+      });
+      const pdata = shot.pages[0]?.data;
+      if (!pdata || !pdata.length) {
+        console.warn(`⚠️ Trang ${page}: không render được bitmap, bỏ qua`);
+        continue;
+      }
+      const pngBuf = Buffer.from(pdata);
+      const raw = await ocrWithGroq(pngBuf, 'image/png');
+      const parsed = await parseOcrResponseWithRepair(raw);
+      const qs = parsed.questions || [];
+      for (const q of qs) {
+        merged.push({
+          ...q,
+          page_number: page,
+          source_file: 'pdf',
+          pdf_rendered_page: true
+        });
+      }
+      if (page < total && PDF_PAGE_OCR_DELAY_MS > 0) {
+        await delay(PDF_PAGE_OCR_DELAY_MS);
+      }
+    }
+
+    if (merged.length === 0) {
+      throw new Error(
+        'Không trích được câu từ PDF (không đủ lớp text và không đọc được nội dung qua ảnh trang). Thử PDF khác hoặc tách ảnh từng trang upload riêng.'
+      );
+    }
+
+    merged.forEach((q, i) => {
+      q.order_number = i + 1;
+    });
+    metadata.total_questions = merged.length;
+    return { questions: merged, metadata };
+  } finally {
+    if (parser?.destroy) {
+      try {
+        await parser.destroy();
+      } catch (_) {
+        /* ignore */
+      }
+    }
+  }
+};
+
 const isImageFile = (mimeType) => {
   return mimeType.startsWith('image/');
 };
 
 const ocrExamImage = async (fileBuffer, mimeType = 'image/png') => {
   const useGeminiForImages = true;
-  
+
   try {
+    if (mimeType === 'application/pdf') {
+      const txt = await tryExtractPdfText(fileBuffer);
+      if (txt.length >= MIN_PDF_TEXT_USE_TEXT_PATH) {
+        console.log(
+          `📄 PDF: dùng lớp text (${txt.length} ký tự, ngưỡng ${MIN_PDF_TEXT_USE_TEXT_PATH}) → Groq JSON`
+        );
+        const responseText = await groqOcrExamFromExtractedText(txt);
+        return await parseOcrResponseWithRepair(responseText);
+      }
+      console.log(
+        `📄 PDF: ít/không có lớp text (${txt.length} ký tự) → render ${MAX_PDF_PAGES_RENDER_OCR} trang tối đa + vision`
+      );
+      return await ocrPdfViaRenderedPages(fileBuffer);
+    }
+
     let responseText;
 
     if (isImageFile(mimeType) && useGeminiForImages) {
@@ -412,20 +639,11 @@ const ocrExamImage = async (fileBuffer, mimeType = 'image/png') => {
       console.log('🖼️ Image detected → Using Groq Vision...');
       responseText = await ocrWithGroq(fileBuffer, mimeType);
     } else {
-      console.log('📄 Document detected → Gemini (nếu có) rồi Groq...');
-      if (isGeminiConfigured()) {
-        try {
-          responseText = await ocrWithGemini(fileBuffer, mimeType);
-        } catch (gemErr) {
-          console.error('❌ Gemini document OCR failed:', gemErr.message);
-          responseText = await ocrWithGroq(fileBuffer, mimeType);
-        }
-      } else {
-        responseText = await ocrWithGroq(fileBuffer, mimeType);
-      }
+      console.log('📄 Word → Groq text (model:', MODELS.groq.textOcrFast + ')');
+      responseText = await ocrWithGroq(fileBuffer, mimeType);
     }
 
-    return parseOcrResponse(responseText);
+    return await parseOcrResponseWithRepair(responseText);
   } catch (error) {
     console.error('OCR Error:', error);
     throw new Error(`Lỗi OCR: ${error.message}`);
