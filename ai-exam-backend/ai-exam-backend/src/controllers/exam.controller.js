@@ -606,7 +606,7 @@ const ocrQuestionsForExam = async (req, res) => {
     if (files.length === 0) {
       return res.status(400).json({
         status: 'error',
-        message: 'Vui lòng upload file (JPG, PNG, PDF)'
+        message: 'Vui lòng upload file (JPG, PNG, PDF, DOC, DOCX)'
       });
     }
 
