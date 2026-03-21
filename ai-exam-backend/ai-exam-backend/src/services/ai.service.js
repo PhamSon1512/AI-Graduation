@@ -222,6 +222,8 @@ const isGroqRateOrQuotaError = (err) => {
   } catch (_) {
     /* ignore */
   }
+  // max_tokens / invalid_request_error → không retry (sẽ fail lại, là lỗi tham số)
+  if (/invalid_request_error|max_tokens.*must be less/i.test(msg)) return false;
   if (status === 413 || status === 429) return true;
   if (/rate_limit|too large|TPM|tokens per minute|Request too large/i.test(msg)) return true;
   return false;
@@ -504,7 +506,8 @@ ${OCR_OUTPUT_JSON_ONLY}`;
     model,
     messages,
     temperature: isTextOnlyDoc ? 0.05 : 0.05,
-    max_tokens: isTextOnlyDoc ? 16000 : 8000
+    // Vision model (Llama4-Scout): max output = 8192 tokens; dùng 7000 để có buffer
+    max_tokens: isTextOnlyDoc ? 16000 : 7000
   };
 
   let completion;
