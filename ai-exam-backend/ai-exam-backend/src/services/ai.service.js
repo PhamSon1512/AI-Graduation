@@ -13,10 +13,17 @@ const path = require('path');
 
 const OCR_EXAM_PROMPT = `Bạn là chuyên gia OCR đề thi. Hãy trích xuất TẤT CẢ câu hỏi từ nội dung này.
 
+NGUYÊN TẮC CHÍNH XÁC (ĐỌC TRƯỚC KHI LÀM):
+Copy CHÍNH XÁC nội dung câu hỏi từ đề — không tóm tắt, không bỏ bớt, không thay đổi từ ngữ hay số liệu. Mỗi con số, ký hiệu, công thức PHẢI giữ nguyên như bản gốc.
+
 QUAN TRỌNG — ĐÁP ÁN (KHÔNG ĐƯỢC BỎ TRỐNG):
 - Với trắc nghiệm một đáp án (4 phương án A/B/C/D): trường correct_answer PHẢI luôn là đúng MỘT chữ "A", "B", "C" hoặc "D" (string).
-- Tìm đáp án trong đề: "Đáp án:", "Đ/S:", "Key:", dấu * hoặc gạch chân tại phương án đúng, chữ khoanh tròn, bảng đáp án, hoặc "(Đáp án đúng)" cạnh phương án.
-- Nếu đề không in rõ đáp án: dùng kiến thức Vật lý 12 để chọn phương án đúng nhất và ghi một dòng trong explanation_html: "Đáp án suy luận (đề không in key rõ)."
+
+THỨ TỰ TÌM ĐÁP ÁN (ưu tiên cao → thấp):
+1. Bảng đáp án / Đáp án ở cuối đề (thường dạng bảng: Câu 1-D, Câu 2-A, ...) — LUÔN tìm trước
+2. Dấu hiệu trực quan: dấu ✓, ★, khoanh tròn, gạch chân, in đậm tại phương án đúng
+3. Ghi chú "Đáp án:", "Key:", "Đ/A:" cạnh từng câu
+4. CHỈ KHI không tìm thấy ở cả 3 nguồn trên → mới dùng kiến thức Vật lý 12 để suy luận, và GHI RÕ trong explanation_html: "⚠️ Đáp án suy luận — đề không in key."
 
 QUAN TRỌNG VỀ HÌNH ẢNH:
 - Nếu câu hỏi có hình ảnh (biển báo, sơ đồ, đồ thị, hình vẽ), hãy MÔ TẢ CHI TIẾT hình ảnh đó
@@ -36,6 +43,12 @@ VÍ DỤ cho câu hỏi có hình biển báo:
   },
   "correct_answer": "B"
 }
+
+SAO CHÉP ĐẦY ĐỦ NỘI DUNG:
+Với mỗi câu hỏi, nội dung content_html PHẢI bao gồm TOÀN BỘ đề bài — kể cả dữ kiện dài, bảng số liệu, đoạn mô tả tình huống. KHÔNG được tóm tắt. Nếu câu hỏi dài 10 dòng thì content_html cũng phải đủ 10 dòng.
+
+GIỮ NGUYÊN CÔNG THỨC:
+Mọi biểu thức toán/vật lý giữ nguyên bằng LaTeX ($...$). Ví dụ: $v = \\omega A \\cos(\\omega t + \\varphi)$, $E = mc^2$, $U = IR$. Không viết tắt, không bỏ chỉ số.
 
 ĐỊNH DẠNG JSON TRẢ VỀ (KHÔNG thêm text khác):
 
@@ -149,7 +162,8 @@ const OCR_OUTPUT_JSON_ONLY = `
 === ĐẦU RA (bắt buộc) ===
 Trả về MỘT object JSON hợp lệ duy nhất với khóa "questions" (mảng) và "metadata" (object).
 Mỗi phần tử questions có trắc nghiệm 4 lựa chọn PHẢI có correct_answer là "A"|"B"|"C"|"D".
-Không dùng markdown, không bọc \`\`\`, không thêm lời giải thích trước hoặc sau JSON.`;
+Không dùng markdown, không bọc \`\`\`, không thêm lời giải thích trước hoặc sau JSON.
+Lưu ý: copy CHÍNH XÁC nội dung từng câu hỏi từ đề gốc, KHÔNG tóm tắt. Nếu đề có bảng đáp án ở cuối thì dùng đáp án từ bảng đó.`;
 
 /** Giới hạn độ dài text gửi LLM (tránh vượt context / timeout) */
 const MAX_PDF_TEXT_CHARS = 120000;

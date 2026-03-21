@@ -28,7 +28,9 @@ const PHYSICS_12_TOPICS = [
   'dien_xoay_chieu',
   'song_anh_sang',
   'luong_tu_anh_sang',
-  'vat_ly_hat_nhan'
+  'vat_ly_hat_nhan',
+  'nhiet_hoc',
+  'dien_tu_truong'
 ];
 
 const BLOOM_LEVELS = ['nhan_biet', 'thong_hieu', 'van_dung', 'van_dung_cao'];
