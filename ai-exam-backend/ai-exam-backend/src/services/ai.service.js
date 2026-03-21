@@ -9,6 +9,7 @@ const {
 const { normalizeQuestionType } = require('../constants/questionTypes');
 const { PDFParse } = require('pdf-parse');
 const mammoth = require('mammoth');
+const path = require('path');
 
 const OCR_EXAM_PROMPT = `Bạn là chuyên gia OCR đề thi. Hãy trích xuất TẤT CẢ câu hỏi từ nội dung này.
 
@@ -297,17 +298,47 @@ const tryExtractPdfText = async (buffer) => {
   }
 };
 
-const extractTextFromWord = async (buffer) => {
+const extractTextFromWord = async (buffer, originalName = '') => {
+  const ext = path.extname(originalName || '').toLowerCase();
   try {
     const result = await mammoth.extractRawText({ buffer });
-    return result.value;
+    let text = String(result.value || '').trim();
+    const score = (s) => s.replace(/\s/g, '').length;
+    if (score(text) < 50) {
+      const html = await mammoth.convertToHtml({ buffer });
+      const fromHtml = String(html.value || '')
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (score(fromHtml) > score(text)) {
+        text = fromHtml;
+      }
+    }
+    if (score(text) < 20) {
+      throw new Error('WORD_NO_EXTRACTABLE_TEXT');
+    }
+    if (text.length > MAX_PDF_TEXT_CHARS) {
+      console.warn(`⚠️ Word text truncated: ${text.length} → ${MAX_PDF_TEXT_CHARS} chars`);
+      text =
+        text.slice(0, MAX_PDF_TEXT_CHARS) +
+        '\n\n[... phần sau đã bị cắt do giới hạn độ dài ...]';
+    }
+    return text;
   } catch (error) {
+    if (error.message === 'WORD_NO_EXTRACTABLE_TEXT') {
+      throw error;
+    }
     console.error('Word Parse Error:', error);
+    if (ext === '.doc') {
+      throw new Error('DOC_LEGACY_NOT_SUPPORTED');
+    }
     throw new Error('Không thể đọc file Word');
   }
 };
 
-const ocrWithGemini = async (fileBuffer, mimeType) => {
+const ocrWithGemini = async (fileBuffer, mimeType, meta = {}) => {
   const isDocText =
     mimeType === 'application/pdf' ||
     mimeType === 'application/msword' ||
@@ -320,7 +351,7 @@ const ocrWithGemini = async (fileBuffer, mimeType) => {
     content = [OCR_EXAM_PROMPT + '\n\nNội dung đề thi:\n' + text];
   } else if (mimeType === 'application/msword' ||
     mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-    const text = await extractTextFromWord(fileBuffer);
+    const text = await extractTextFromWord(fileBuffer, meta.originalName || '');
     content = [OCR_EXAM_PROMPT + '\n\nNội dung đề thi:\n' + text];
   } else {
     const visionTail =
@@ -366,14 +397,14 @@ const repairOcrJsonWithGroq = async (brokenText) => {
   return String(c);
 };
 
-const ocrWithGroq = async (fileBuffer, mimeType) => {
+const ocrWithGroq = async (fileBuffer, mimeType, meta = {}) => {
   const groq = getGroqClient();
 
   let messages = [];
 
   if (mimeType === 'application/msword' ||
     mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-    const text = await extractTextFromWord(fileBuffer);
+    const text = await extractTextFromWord(fileBuffer, meta.originalName || '');
     messages = [
       {
         role: 'system',
@@ -808,7 +839,7 @@ const isImageFile = (mimeType) => {
   return mimeType.startsWith('image/');
 };
 
-const ocrExamImage = async (fileBuffer, mimeType = 'image/png') => {
+const ocrExamImage = async (fileBuffer, mimeType = 'image/png', meta = {}) => {
   const useGeminiForImages = true;
 
   try {
@@ -849,18 +880,18 @@ const ocrExamImage = async (fileBuffer, mimeType = 'image/png') => {
     if (isImageFile(mimeType) && useGeminiForImages) {
       console.log('🖼️ Image detected → Trying Gemini Vision...');
       try {
-        responseText = await ocrWithGemini(fileBuffer, mimeType);
+        responseText = await ocrWithGemini(fileBuffer, mimeType, meta);
       } catch (geminiError) {
         console.error('❌ Gemini failed:', geminiError.message);
         console.log('🔄 Falling back to Groq Vision...');
-        responseText = await ocrWithGroq(fileBuffer, mimeType);
+        responseText = await ocrWithGroq(fileBuffer, mimeType, meta);
       }
     } else if (isImageFile(mimeType)) {
       console.log('🖼️ Image detected → Using Groq Vision...');
-      responseText = await ocrWithGroq(fileBuffer, mimeType);
+      responseText = await ocrWithGroq(fileBuffer, mimeType, meta);
     } else {
       console.log('📄 Word → Groq text (model:', MODELS.groq.textOcrFast, ')');
-      responseText = await ocrWithGroq(fileBuffer, mimeType);
+      responseText = await ocrWithGroq(fileBuffer, mimeType, meta);
     }
 
     return await parseOcrResponseWithRepair(responseText);
@@ -928,7 +959,9 @@ const ocrMultipleFiles = async (files) => {
         url: pageImageUrl
       });
       
-      const fileResult = await ocrExamImage(file.buffer, file.mimetype);
+      const fileResult = await ocrExamImage(file.buffer, file.mimetype, {
+        originalName: file.originalname
+      });
 
       if (fileResult.questions && Array.isArray(fileResult.questions)) {
         const questionsWithPage = fileResult.questions.map((q, idx) => ({

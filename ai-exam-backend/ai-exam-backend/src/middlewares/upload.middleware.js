@@ -38,9 +38,15 @@ const examFileFilter = (req, file, cb) => {
     cb(null, true);
     return;
   }
+  const ext = path.extname(file.originalname || '').toLowerCase();
+  // .docx là ZIP — một số môi trường gửi application/zip hoặc x-zip-compressed
+  const wordZipMimes = ['application/x-zip-compressed', 'application/zip', 'binary/octet-stream'];
+  if (ext === '.docx' && wordZipMimes.includes(file.mimetype)) {
+    cb(null, true);
+    return;
+  }
   // Một số trình duyệt/OS gửi PDF/Office dưới dạng application/octet-stream
   if (file.mimetype === 'application/octet-stream') {
-    const ext = path.extname(file.originalname || '').toLowerCase();
     const ok = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png', '.webp', '.gif'].includes(ext);
     if (ok) {
       cb(null, true);

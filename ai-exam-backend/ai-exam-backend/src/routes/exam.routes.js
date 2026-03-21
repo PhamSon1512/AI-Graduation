@@ -412,7 +412,13 @@ router.post('/:examId/questions/import', authorizeRoles('teacher'), upload.singl
  *       200:
  *         description: Trích xuất câu hỏi thành công, cần duyệt trước khi lưu
  */
-router.post('/:examId/questions/ocr', authorizeRoles('teacher'), upload.array('files', 10), ocrQuestionsForExam);
+router.post(
+  '/:examId/questions/ocr',
+  authorizeRoles('teacher'),
+  upload.array('files', 10),
+  upload.handleMulterError,
+  ocrQuestionsForExam
+);
 
 // ==================== OCR SESSIONS ====================
 

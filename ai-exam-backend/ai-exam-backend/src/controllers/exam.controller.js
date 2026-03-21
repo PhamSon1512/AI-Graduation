@@ -585,7 +585,8 @@ const importQuestionsFromExcel = async (req, res) => {
 /** Chuẩn hoá MIME khi trình duyệt gửi application/octet-stream */
 const normalizeExamUploadMime = (file) => {
   const ext = path.extname(file.originalname || '').toLowerCase();
-  if (file.mimetype === 'application/octet-stream') {
+  const m = file.mimetype;
+  if (m === 'application/octet-stream' || m === 'application/x-zip-compressed' || m === 'application/zip') {
     if (ext === '.pdf') return 'application/pdf';
     if (ext === '.doc') return 'application/msword';
     if (ext === '.docx') {
@@ -639,7 +640,9 @@ const ocrQuestionsForExam = async (req, res) => {
 
     let ocrResult;
     if (filesNorm.length === 1) {
-      ocrResult = await ocrExamImage(filesNorm[0].buffer, filesNorm[0].mimetype);
+      ocrResult = await ocrExamImage(filesNorm[0].buffer, filesNorm[0].mimetype, {
+        originalName: filesNorm[0].originalname
+      });
     } else {
       ocrResult = await ocrMultipleFiles(filesNorm);
     }
@@ -647,7 +650,8 @@ const ocrQuestionsForExam = async (req, res) => {
     if (!ocrResult.questions || ocrResult.questions.length === 0) {
       return res.status(400).json({
         status: 'error',
-        message: 'Không trích xuất được câu hỏi từ file'
+        message:
+          'Không trích xuất được câu hỏi từ file. Word: dùng .docx có chữ chọn được (không phải toàn ảnh scan); file .doc cũ cần Lưu thành .docx. Kiểm tra đề có đủ câu hỏi dạng chữ.'
       });
     }
 
@@ -675,6 +679,21 @@ const ocrQuestionsForExam = async (req, res) => {
     });
   } catch (error) {
     console.error('OCR error:', error);
+    const msg = String(error?.message || '');
+    if (msg.includes('DOC_LEGACY_NOT_SUPPORTED')) {
+      return res.status(400).json({
+        status: 'error',
+        message:
+          'File .doc (Word 97–2003) không hỗ trợ. Vui lòng Mở bằng Word → Lưu thành .docx rồi upload lại.'
+      });
+    }
+    if (msg.includes('WORD_NO_EXTRACTABLE_TEXT') || msg.includes('Không thể đọc file Word')) {
+      return res.status(400).json({
+        status: 'error',
+        message:
+          'Không đọc được chữ trong file Word (file scan/ảnh, hoặc nội dung rỗng). Hãy dùng .docx có thể bôi đen copy được chữ, hoặc xuất PDF có lớp text.'
+      });
+    }
     res.status(500).json({
       status: 'error',
       message: error.message || 'Lỗi server khi OCR'

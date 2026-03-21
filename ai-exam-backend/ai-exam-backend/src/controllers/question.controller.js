@@ -5,7 +5,8 @@ const fs = require('fs');
 
 const normalizeExamUploadMime = (file) => {
   const ext = path.extname(file.originalname || '').toLowerCase();
-  if (file.mimetype === 'application/octet-stream') {
+  const m = file.mimetype;
+  if (m === 'application/octet-stream' || m === 'application/x-zip-compressed' || m === 'application/zip') {
     if (ext === '.pdf') return 'application/pdf';
     if (ext === '.doc') return 'application/msword';
     if (ext === '.docx') {
@@ -34,7 +35,9 @@ const ocrExamImageHandler = async (req, res) => {
     let result;
 
     if (filesNorm.length === 1) {
-      result = await ocrExamImage(filesNorm[0].buffer, filesNorm[0].mimetype);
+      result = await ocrExamImage(filesNorm[0].buffer, filesNorm[0].mimetype, {
+        originalName: filesNorm[0].originalname
+      });
       result.metadata = {
         ...result.metadata,
         files_processed: 1,
