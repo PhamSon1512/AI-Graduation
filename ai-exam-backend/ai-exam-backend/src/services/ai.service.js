@@ -109,6 +109,14 @@ Hướng dẫn xác định bloom_level:
 - van_dung: Bài tập tính toán cơ bản
 - van_dung_cao: Bài tập phức tạp, nhiều bước
 
+⚠️ NHẬN BIẾT KÝ HIỆU BLOOM LEVEL (ĐỌC KỸ — RẤT QUAN TRỌNG):
+Trong đề thi THPT Việt Nam, các ký hiệu sau đứng TRƯỚC từng phát biểu/câu hỏi là MỨC ĐỘ NHẬN THỨC BLOOM, KHÔNG PHẢI ĐÁP ÁN:
+  [B] hoặc (B) = Biết  — ≠ "Biểu thị đúng"
+  [H] hoặc (H) = Hiểu  — ≠ "Hiệu quả" hay "đúng"
+  [VD] = Vận dụng
+  [VD cao] = Vận dụng cao
+Hãy BỎ QUA hoàn toàn các ký hiệu này khi phân tích nội dung và đáp án câu hỏi.
+
 CÁCH PHÂN BIỆT CÁC PHẦN TRONG ĐỀ THI THPT:
 
 - "PHẦN I" hoặc "Câu trắc nghiệm nhiều phương án lựa chọn" → trac_nghiem_1_dap_an (chọn 1 trong A/B/C/D)
@@ -124,17 +132,28 @@ HƯỚNG DẪN TỪNG LOẠI CÂU HỎI:
    - correct_answer: "A" hoặc "B" hoặc "C" hoặc "D"
 
 2. trac_nghiem_dung_sai (PHẦN II - Câu đúng sai):
-   - Nhận dạng: Có 4 phát biểu a), b), c), d) - xác định từng phát biểu ĐÚNG hay SAI
-   - Có thể nhiều phát biểu đúng (VD: b và c đều đúng)
-   - options: { "a": "nội dung phát biểu a", "b": "nội dung phát biểu b", "c": "nội dung phát biểu c", "d": "nội dung phát biểu d" }
-   - correct_answer: PHẢI là object JSON: {"a":false,"b":true,"c":true,"d":false}
-   - CHÚ Ý: KHÔNG được trả về dạng "B" hay "b" - phải trả về object JSON với 4 giá trị true/false
+   - Nhận dạng: Câu có 4 phát biểu a), b), c), d) — mỗi phát biểu cần xác định Đúng/Sai độc lập
+   - LOẠI BỎ ngay ký hiệu bloom [B], (H), [VD]... khỏi nội dung phát biểu trước khi phân tích
+   - PHÂN TÍCH VẬT LÝ từng phát biểu: kiểm tra từng phát biểu bằng kiến thức Vật lý 12
+   - ⚠️ CẢNH BÁO: KHÔNG được trả về tất cả true — đề thi cố ý đặt 1–2 phát biểu sai!
+   - Thống kê thực tế đề thi THPT: thường có 1–2 phát biểu đúng trong 4 (hoặc 2–3 đúng)
+   - options: { "a": "nội dung phát biểu a (bỏ ký hiệu bloom)", "b": "...", "c": "...", "d": "..." }
+   - correct_answer: PHẢI là object JSON {"a":bool,"b":bool,"c":bool,"d":bool}
+
+   CÁCH PHÂN TÍCH MẪU (câu về dòng xoay chiều với đồ thị):
+   a) "Dòng điện tạo ra là dòng xoay chiều" → Đúng (máy phát AC tạo dòng xoay chiều)
+   b) "Chu kỳ dòng điện là 4 s" nhưng đồ thị trục x là t(10⁻³ s), 1 chu kỳ = 4 vạch = 4×10⁻³ s → SAI (b:false)
+   c) "Cường độ hiệu dụng $\\frac{5\\sqrt{2}}{2}$ A" với biên độ I₀=5A → $I = I_0/\\sqrt{2} = \\frac{5\\sqrt{2}}{2}$ A → Đúng
+   d) "Phương trình $i = 5\\cos(500\\pi t - \\pi/2)$" với T=4×10⁻³ s → ω=2π/T=500π rad/s → Đúng
+   → correct_answer: {"a":true,"b":false,"c":true,"d":true}
 
 3. trac_nghiem_tra_loi_ngan (PHẦN III - Trả lời ngắn, nhập số):
-   - Nhận dạng: Yêu cầu nhập số, thường có quy tắc làm tròn (số nguyên, 1-2 chữ số thập phân)
+   - Nhận dạng: Câu hỏi yêu cầu tính toán và nhập một con số; thường có quy tắc làm tròn
    - options: null
-   - correct_answer: "42.5" (số đáp án, dạng string)
-   - rounding_rule: "integer" | "1_decimal" | "2_decimals" (theo yêu cầu trong đề)
+   - correct_answer: PHẢI là một số dạng string (KHÔNG được null hay rỗng)
+   - Nếu đề không cho sẵn đáp án: PHẢI TỰ TÍNH từ dữ kiện bài → áp dụng công thức vật lý → ra số
+   - Ví dụ: "Chu kỳ dao động LC với L=0,1H, C=100µF" → T = 2π√(LC) = 2π√(0,1×10⁻⁴) ≈ 0,0063 s → correct_answer = "0.0063"
+   - rounding_rule: "integer" | "1_decimal" | "2_decimals" | "3_decimals" (dựa theo đơn vị và độ chính xác yêu cầu)
 
 4. tu_luan (PHẦN IV - Câu tự luận):
    - Nhận dạng: Câu hỏi mở, yêu cầu giải thích/chứng minh/tính toán chi tiết, không có options A/B/C/D
@@ -146,23 +165,38 @@ HƯỚNG DẪN TỪNG LOẠI CÂU HỎI:
    - options: { "A": "...", "B": "...", "C": "...", "D": "..." }
    - correct_answer: "A,B,C" (các đáp án đúng cách nhau bởi dấu phẩy)
 
-VÍ DỤ CÂU ĐÚNG SAI (PHẦN II):
-Đề bài: "Hình bên mô phỏng thiết bị báo động nhiệt độ... Khi piston chạm vào vật M..."
-- a) Áp suất khí trong xi lanh lúc còi bắt đầu... → SAI
-- b) Nhiệt độ trong xi lanh khi còi bắt đầu phát ra âm thanh báo động là $87°C$ → ĐÚNG
-- c) Ban đầu áp suất khí trong xi lanh là $1,1.10^5$ Pa → ĐÚNG
-- d) Nhiệt độ trong xi lanh khi piston vừa tiếp xúc với vật nặng M là $47°C$ → SAI
+VÍ DỤ CÂU ĐÚNG SAI (PHẦN II) — ĐIỂN HÌNH CÓ CẢ ĐÚNG LẪN SAI:
+Đề bài: "Dòng điện do máy phát tạo ra, đồ thị i-t cho chu kỳ T = 4×10⁻³ s, I₀ = 5A"
+- a) [B] Dòng điện tạo ra là dòng xoay chiều → ĐÚNG (AC)
+- b) (H) Chu kỳ là 4 s → SAI (đồ thị x-axis là 10⁻³ s, chu kỳ = 4ms ≠ 4s)
+- c) (H) Cường độ hiệu dụng $\\frac{5\\sqrt{2}}{2}$ A → ĐÚNG (I = I₀/√2)
+- d) [VD] Phương trình $i = 5\\cos(500\\pi t - \\pi/2)$ A → ĐÚNG (ω=500π, pha ban đầu từ đồ thị)
 
 Kết quả:
 {
   "question_type": "trac_nghiem_dung_sai",
   "options": {
-    "a": "Áp suất khí trong xi lanh lúc còi bắt đầu phát ra âm thanh báo động là $1,3.10^5$ Pa.",
-    "b": "Nhiệt độ trong xi lanh khi còi bắt đầu phát ra âm thanh báo động là $87°C$.",
-    "c": "Ban đầu áp suất khí trong xi lanh là $1,1.10^5$ Pa.",
-    "d": "Nhiệt độ trong xi lanh khi piston vừa tiếp xúc với vật nặng M là $47°C$."
+    "a": "Dòng điện được tạo ra là dòng điện xoay chiều.",
+    "b": "Chu kì của dòng điện là 4 s.",
+    "c": "Cường độ dòng điện hiệu dụng có giá trị $\\frac{5\\sqrt{2}}{2}$ A.",
+    "d": "Phương trình của dòng điện là $i = 5\\cos\\left(500\\pi t - \\frac{\\pi}{2}\\right)$ A."
   },
+  "correct_answer": {"a":true,"b":false,"c":true,"d":true}
+}
+
+VÍ DỤ CÂU ĐÚNG SAI khác (khí lý tưởng):
+{
   "correct_answer": {"a":false,"b":true,"c":true,"d":false}
+}
+
+VÍ DỤ PHẦN III (Trả lời ngắn):
+Đề: "Mạch dao động LC với L=0,2H, C=200µF. Chu kỳ dao động riêng là bao nhiêu ms?"
+→ T = 2π√(LC) = 2π√(0,2 × 200×10⁻⁶) = 2π × 0,00632 ≈ 0,0397 s ≈ 39,7 ms
+{
+  "question_type": "trac_nghiem_tra_loi_ngan",
+  "options": null,
+  "correct_answer": "39.7",
+  "rounding_rule": "1_decimal"
 }
 
 VÍ DỤ CÂU TỰ LUẬN (PHẦN IV):
@@ -171,7 +205,7 @@ Kết quả:
 {
   "question_type": "tu_luan",
   "options": null,
-  "correct_answer": "Từ phương trình x = A.cos(ωt + φ), ta có: v = dx/dt = -Aω.sin(ωt + φ) và a = dv/dt = -Aω².cos(ωt + φ) = -ω²x. Vì ω² > 0 nên a và x luôn trái dấu, nghĩa là gia tốc luôn hướng về vị trí cân bằng (x = 0)."
+  "correct_answer": "Từ phương trình x = A.cos(ωt + φ), ta có: a = -ω²x. Vì ω² > 0 nên a và x luôn trái dấu, gia tốc luôn hướng về VTCB."
 }`;
 
 /** Ghép vào cuối prompt khi gửi PDF/Word cho Groq — buộc chỉ trả JSON */
@@ -472,6 +506,12 @@ VÍ DỤ content_html ĐÚNG:
 VÍ DỤ option ĐÚNG: "$1{,}4 \\times 10^{-3}$ T" (sai nếu viết "1,4 . 10⁻³ T")
 "\${}_{17}^{35}Cl + {}_{Z}^{A}X \\rightarrow {}_{16}^{32}S + {}_{2}^{4}He$" (sai nếu dùng ký tự nhỏ Unicode)
 
+KÝ HIỆU BLOOM (quan trọng): [B], (B), [H], (H), [VD], [VD cao] đứng trước phát biểu là MỨC ĐỘ NHẬN THỨC — KHÔNG PHẢI ĐÁP ÁN. Bỏ qua hoàn toàn khi phân tích.
+
+CÂU ĐÚNG SAI: KHÔNG được trả về tất cả true. Phân tích vật lý từng phát biểu — thường có 1–2 phát biểu sai trong 4. Ký hiệu [B], (H)... trước mỗi phát biểu là bloom level, không liên quan đến đúng/sai.
+
+CÂU TRẢ LỜI NGẮN (Phần III): PHẢI tính toán và điền số vào correct_answer, không để null/rỗng.
+
 ĐÁP ÁN: Với câu trắc nghiệm 4 phương án, correct_answer PHẢI là "A", "B", "C" hoặc "D". Tìm dấu *, khoanh tròn, gạch chân, hoặc bảng đáp án cuối đề. Không để trống.
 
 SAO CHÉP ĐẦY ĐỦ: Copy CHÍNH XÁC toàn bộ nội dung câu hỏi — không tóm tắt, không bỏ bớt dữ kiện, giữ nguyên số liệu.
@@ -713,7 +753,7 @@ const enrichOcrQuestionsWithMissingAnswers = async (parsed) => {
           {
             role: 'system',
             content:
-              'Bạn là giáo viên Vật lý 12. Input là JSON mảng các object {i, content_html, options}. Mỗi câu là trắc nghiệm 4 phương án A-D nhưng thiếu đáp án. Trả về CHỈ một JSON: {"items":[{"i":number,"correct_answer":"A"|"B"|"C"|"D"}]}. Trường i phải khớp input. Chọn đáp án đúng theo vật lý nếu đề không ghi key.'
+              'Bạn là giáo viên Vật lý 12. Input là JSON mảng các object {i, content_html, options}. Mỗi câu là trắc nghiệm 4 phương án A-D nhưng thiếu đáp án. Trả về CHỈ một JSON: {"items":[{"i":number,"correct_answer":"A"|"B"|"C"|"D"}]}. Trường i phải khớp input. Chọn đáp án đúng theo vật lý. Bỏ qua ký hiệu [B] [H] [VD] (bloom level) trước từng phát biểu.'
           },
           { role: 'user', content: JSON.stringify(needGroq) }
         ],
@@ -765,6 +805,135 @@ const enrichOcrQuestionsWithMissingAnswers = async (parsed) => {
         '(Chưa có đáp án trong đề — giáo viên vui lòng nhập lời giải / đáp án tự luận.)';
     }
   });
+
+  // Lần 2: câu Đúng/Sai có tất cả đều true (all-true) → rất có thể AI chưa phân tích đúng
+  // Gọi Groq text để phân tích lại bằng kiến thức vật lý
+  const allTrueDungSai = [];
+  parsed.questions.forEach((q, idx) => {
+    const qType = normalizeQuestionType(q.question_type);
+    if (qType !== 'trac_nghiem_dung_sai') return;
+    let ca = q.correct_answer;
+    try {
+      if (typeof ca === 'string') ca = JSON.parse(ca);
+    } catch {
+      return;
+    }
+    if (!ca || typeof ca !== 'object') return;
+    const vals = Object.values(ca);
+    // Nếu tất cả đều true → nghi ngờ AI nhầm bloom level [B],[H] là đáp án
+    const allTrue = vals.length === 4 && vals.every((v) => v === true);
+    if (allTrue) {
+      allTrueDungSai.push({
+        i: idx,
+        content_html: String(q.content_html || q.contentHtml || '').slice(0, 2000),
+        options: q.options || {}
+      });
+    }
+  });
+
+  if (allTrueDungSai.length > 0) {
+    try {
+      const groq = getGroqClient();
+      const systemMsg =
+        'Bạn là giáo viên Vật lý 12 chuyên phân tích câu hỏi Đúng/Sai (PHẦN II THPT). ' +
+        'Input là JSON mảng câu Đúng/Sai. Ký hiệu [B], [H], (H), [VD] trước phát biểu là bloom level, KHÔNG phải đáp án. ' +
+        'Phân tích từng phát biểu a,b,c,d bằng kiến thức vật lý. Thường 1-2 phát biểu sai, HIẾM KHI tất cả đều đúng. ' +
+        'Trả về JSON: {"items":[{"i":number,"correct_answer":{"a":bool,"b":bool,"c":bool,"d":bool},"reasoning":"lý do ngắn"}]}';
+      const completion = await groqChatCompletionsCreateWithRetry(groq, {
+        model: MODELS.groq.text,
+        messages: [
+          { role: 'system', content: systemMsg },
+          { role: 'user', content: JSON.stringify(allTrueDungSai) }
+        ],
+        temperature: 0.1,
+        max_tokens: 6000,
+        response_format: { type: 'json_object' }
+      });
+      const raw = completion?.choices?.[0]?.message?.content;
+      if (raw) {
+        const fill = extractJsonObjectFromAiText(String(raw));
+        const items = fill?.items;
+        if (Array.isArray(items)) {
+          for (const it of items) {
+            const idx = typeof it.i === 'number' ? it.i : parseInt(it.i, 10);
+            if (!Number.isInteger(idx) || idx < 0 || idx >= parsed.questions.length) continue;
+            if (!it.correct_answer || typeof it.correct_answer !== 'object') continue;
+            const ca = it.correct_answer;
+            if (
+              typeof ca.a === 'boolean' &&
+              typeof ca.b === 'boolean' &&
+              typeof ca.c === 'boolean' &&
+              typeof ca.d === 'boolean'
+            ) {
+              parsed.questions[idx].correct_answer = JSON.stringify(ca);
+              if (it.reasoning) {
+                const note = `<p><em>[Đáp án phân tích: ${it.reasoning}]</em></p>`;
+                const prev = parsed.questions[idx].explanation_html || '';
+                if (!prev.includes(it.reasoning.slice(0, 20))) {
+                  parsed.questions[idx].explanation_html = prev + note;
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('enrichOcrQuestionsWithMissingAnswers (dung_sai all-true fix):', e.message);
+    }
+  }
+
+  // Lần 2: câu trả lời ngắn vẫn thiếu số đáp án → Groq tự tính
+  const missingShortAnswer = [];
+  parsed.questions.forEach((q, idx) => {
+    const qType = normalizeQuestionType(q.question_type);
+    if (qType !== 'trac_nghiem_tra_loi_ngan') return;
+    const ca = q.correct_answer;
+    if (ca == null || String(ca).trim() === '') {
+      missingShortAnswer.push({
+        i: idx,
+        content_html: String(q.content_html || q.contentHtml || '').slice(0, 1800)
+      });
+    }
+  });
+
+  if (missingShortAnswer.length > 0) {
+    try {
+      const groq = getGroqClient();
+      const completion = await groqChatCompletionsCreateWithRetry(groq, {
+        model: MODELS.groq.text,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'Bạn là giáo viên Vật lý 12. Input là JSON mảng câu trắc nghiệm trả lời ngắn (nhập số). ' +
+              'Tính toán từ dữ kiện và công thức vật lý để tìm số đáp án. ' +
+              'Trả về JSON: {"items":[{"i":number,"correct_answer":"số_đáp_án","rounding_rule":"integer|1_decimal|2_decimals"}]}'
+          },
+          { role: 'user', content: JSON.stringify(missingShortAnswer) }
+        ],
+        temperature: 0.1,
+        max_tokens: 4000,
+        response_format: { type: 'json_object' }
+      });
+      const raw = completion?.choices?.[0]?.message?.content;
+      if (raw) {
+        const fill = extractJsonObjectFromAiText(String(raw));
+        const items = fill?.items;
+        if (Array.isArray(items)) {
+          for (const it of items) {
+            const idx = typeof it.i === 'number' ? it.i : parseInt(it.i, 10);
+            if (!Number.isInteger(idx) || idx < 0 || idx >= parsed.questions.length) continue;
+            if (it.correct_answer != null && String(it.correct_answer).trim() !== '') {
+              parsed.questions[idx].correct_answer = String(it.correct_answer);
+              if (it.rounding_rule) parsed.questions[idx].rounding_rule = it.rounding_rule;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('enrichOcrQuestionsWithMissingAnswers (short-answer):', e.message);
+    }
+  }
 };
 
 const parseOcrResponseWithRepair = async (responseText) => {
