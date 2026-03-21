@@ -504,7 +504,7 @@ ${OCR_OUTPUT_JSON_ONLY}`;
     model,
     messages,
     temperature: isTextOnlyDoc ? 0.05 : 0.05,
-    max_tokens: isTextOnlyDoc ? 16000 : 16000
+    max_tokens: isTextOnlyDoc ? 16000 : 8000
   };
 
   let completion;
