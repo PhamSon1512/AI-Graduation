@@ -47,8 +47,26 @@ VÍ DỤ cho câu hỏi có hình biển báo:
 SAO CHÉP ĐẦY ĐỦ NỘI DUNG:
 Với mỗi câu hỏi, nội dung content_html PHẢI bao gồm TOÀN BỘ đề bài — kể cả dữ kiện dài, bảng số liệu, đoạn mô tả tình huống. KHÔNG được tóm tắt. Nếu câu hỏi dài 10 dòng thì content_html cũng phải đủ 10 dòng.
 
-GIỮ NGUYÊN CÔNG THỨC:
-Mọi biểu thức toán/vật lý giữ nguyên bằng LaTeX ($...$). Ví dụ: $v = \\omega A \\cos(\\omega t + \\varphi)$, $E = mc^2$, $U = IR$. Không viết tắt, không bỏ chỉ số.
+GIỮ NGUYÊN CÔNG THỨC — LATEX BẮT BUỘC:
+Mọi ký hiệu toán/vật lý PHẢI dùng LaTeX $...$. Tuyệt đối KHÔNG dùng Unicode superscript/subscript như ⁻¹ ⁻² ⁻³ ₁ ₂ ₃ α β ω φ.
+
+Các mẫu LaTeX quan trọng:
+- Hạt nhân: \${}_{Z}^{A}X$ — ví dụ \${}_{17}^{35}Cl$, \${}_{1}^{1}H$, \${}_{2}^{4}He$, \${}_{0}^{1}n$
+- Phản ứng hạt nhân: \${}_{17}^{35}Cl + {}_{Z}^{A}X \\rightarrow {}_{16}^{32}S + {}_{2}^{4}He$
+- Vectơ: $\\vec{B}$, $\\vec{F}$, $\\vec{v}$, $\\vec{E}$
+- Số mũ âm: $2{,}0 \\times 10^{-3}$ hoặc $2{,}0.10^{-3}$ (KHÔNG viết 10⁻³)
+- Chỉ số dưới: $L_0$, $v_1$, $I_0$, $U_C$
+- Căn: $\\sqrt{2}$, $\\sqrt{LC}$
+- Góc: $60^\\circ$, $\\alpha = 30^\\circ$
+- Phân số vật lý: $\\frac{1}{2}mv^2$, $\\frac{Q}{t}$
+
+VÍ DỤ content_html ĐÚNG:
+"Một đoạn dây dài $L=0{,}8$ m đặt trong từ trường, hợp với $\\vec{B}$ góc $\\alpha=60^\\circ$. Biết $I=20$ A, lực từ $F=2{,}0 \\times 10^{-2}$ N. Độ lớn cảm ứng từ $B$ là"
+"Cho phản ứng: \${}_{17}^{35}Cl + {}_{Z}^{A}X \\rightarrow {}_{16}^{32}S + {}_{2}^{4}He$. Hạt nhân X là"
+
+VÍ DỤ option ĐÚNG:
+"$1{,}4 \\times 10^{-3}$ T" (KHÔNG phải "1,4 . 10⁻³ T")
+"\${}_{1}^{1}H$" (KHÔNG phải "₁H¹")
 
 ĐỊNH DẠNG JSON TRẢ VỀ (KHÔNG thêm text khác):
 
@@ -185,10 +203,10 @@ const MAX_PDF_TEXT_CHARS_SINGLE_GROQ_OCR = Math.max(
   8000,
   parseInt(process.env.MAX_PDF_TEXT_FOR_SINGLE_GROQ_OCR || '24000', 10)
 );
-/** Độ phóng to khi render PDF → PNG (càng thấp càng ít token ảnh; mặc định 1.0). */
+/** Độ phóng to khi render PDF → PNG. 1.5 đủ đọc chỉ số hạt nhân nhỏ như ₁₇³⁵Cl. */
 const PDF_PAGE_RENDER_SCALE = Math.min(
   2,
-  Math.max(0.72, parseFloat(process.env.PDF_PAGE_RENDER_SCALE || '1') || 1)
+  Math.max(0.72, parseFloat(process.env.PDF_PAGE_RENDER_SCALE || '1.5') || 1.5)
 );
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -434,8 +452,29 @@ const ocrWithGroq = async (fileBuffer, mimeType, meta = {}) => {
     const base64Image = fileBuffer.toString('base64');
     const imageUrl = `data:${mimeType};base64,${base64Image}`;
 
-    const visionPromptTail =
-      '\n\n(Lưu ý khi đọc ảnh đề: với mỗi câu trắc nghiệm 4 phương án, trường correct_answer PHẢI là đúng một chữ "A", "B", "C" hoặc "D" — tìm dấu * / gạch chân / "Đáp án" trên ảnh; không để trống.)';
+    const visionPromptTail = `
+
+=== YÊU CẦU KHI ĐỌC ẢNH ĐỀ THI VẬT LÝ ===
+
+LATEX BẮT BUỘC — MỌI CÔNG THỨC PHẢI DÙNG $...$:
+- Hạt nhân: \${}_{Z}^{A}X$ — ví dụ \${}_{17}^{35}Cl$, \${}_{1}^{1}H$, \${}_{2}^{4}He$, \${}_{0}^{1}n$
+- Phản ứng hạt nhân: \${}_{17}^{35}Cl + {}_{Z}^{A}X \\rightarrow {}_{16}^{32}S + {}_{2}^{4}He$
+- Vectơ: $\\vec{B}$, $\\vec{F}$, $\\vec{v}$, $\\vec{E}$
+- Số mũ âm: $2{,}0 \\times 10^{-3}$ — KHÔNG viết 10⁻³ (Unicode)
+- Chỉ số: $L_0$, $I_0$, $U_C$, $m_e$
+- Căn: $\\sqrt{2}$  — Góc: $60^\\circ$
+- KHÔNG dùng Unicode superscript ⁻¹ ⁻² ⁻³ hay subscript ₁ ₂ ₃ — luôn dùng LaTeX
+
+VÍ DỤ content_html ĐÚNG:
+"Một đoạn dây $L=0{,}8$ m hợp với $\\vec{B}$ góc $\\alpha=60^\\circ$, $I=20$ A, $F=2{,}0 \\times 10^{-2}$ N. Độ lớn $B$ là"
+VÍ DỤ option ĐÚNG: "$1{,}4 \\times 10^{-3}$ T" (sai nếu viết "1,4 . 10⁻³ T")
+"\${}_{17}^{35}Cl + {}_{Z}^{A}X \\rightarrow {}_{16}^{32}S + {}_{2}^{4}He$" (sai nếu dùng ký tự nhỏ Unicode)
+
+ĐÁP ÁN: Với câu trắc nghiệm 4 phương án, correct_answer PHẢI là "A", "B", "C" hoặc "D". Tìm dấu *, khoanh tròn, gạch chân, hoặc bảng đáp án cuối đề. Không để trống.
+
+SAO CHÉP ĐẦY ĐỦ: Copy CHÍNH XÁC toàn bộ nội dung câu hỏi — không tóm tắt, không bỏ bớt dữ kiện, giữ nguyên số liệu.
+
+${OCR_OUTPUT_JSON_ONLY}`;
     messages = [
       {
         role: 'user',
@@ -464,8 +503,8 @@ const ocrWithGroq = async (fileBuffer, mimeType, meta = {}) => {
   const basePayload = {
     model,
     messages,
-    temperature: isTextOnlyDoc ? 0.05 : 0.1,
-    max_tokens: isTextOnlyDoc ? 16000 : 8000
+    temperature: isTextOnlyDoc ? 0.05 : 0.05,
+    max_tokens: isTextOnlyDoc ? 16000 : 16000
   };
 
   let completion;
@@ -776,6 +815,49 @@ const groqOcrExamFromExtractedText = async (examText) => {
 };
 
 /**
+ * Trích bảng đáp án từ text PDF (thường ở cuối đề dạng "Câu 1: D", "1 - A", ...).
+ * Trả về object { questionNumber: 'A'|'B'|'C'|'D' }.
+ */
+const extractAnswerKeyFromPdfText = (text) => {
+  if (!text || typeof text !== 'string') return {};
+  const answers = {};
+
+  // Tìm đoạn chứa bảng đáp án (phía cuối đề hoặc sau dòng có "ĐÁP ÁN")
+  const markerRx = /đáp\s+án|bảng\s+đáp\s+án|answer\s+key/i;
+  const markerIdx = text.search(markerRx);
+  // Ưu tiên phần sau "đáp án"; nếu không có thì tìm toàn bộ text
+  const section = markerIdx >= 0 ? text.slice(markerIdx) : text;
+
+  // Mẫu: "Câu 1: D", "Câu 1. D", "câu 1 D"
+  const rxCau = /câu\s+(\d{1,3})[:\.\s]+([ABCD])\b/gi;
+  // Mẫu: "1 - D", "1. D", "1: D", "1 D" (chỉ nhận nếu chữ đứng độc lập sau số)
+  const rxNum = /\b(\d{1,3})[\s\-:\.\,]+([ABCD])\b/g;
+
+  const applyPattern = (rx, src) => {
+    let m;
+    while ((m = rx.exec(src)) !== null) {
+      const num = parseInt(m[1], 10);
+      const ans = m[2].toUpperCase();
+      if (num >= 1 && num <= 200 && ['A', 'B', 'C', 'D'].includes(ans)) {
+        if (!answers[num]) answers[num] = ans;
+      }
+    }
+  };
+
+  applyPattern(rxCau, section);
+  // Chỉ dùng rxNum nếu tìm được ít hơn 5 câu từ rxCau (tránh nhầm số trong đề bài)
+  if (Object.keys(answers).length < 5) {
+    applyPattern(rxNum, section);
+  }
+
+  const count = Object.keys(answers).length;
+  if (count > 0) {
+    console.log(`📋 Bảng đáp án: ${count} câu (từ text layer PDF)`);
+  }
+  return answers;
+};
+
+/**
  * PDF scan / ít text: render từng trang → PNG (pdf-parse) → Groq vision → gộp câu hỏi.
  */
 const ocrPdfViaRenderedPages = async (buffer) => {
@@ -789,6 +871,11 @@ const ocrPdfViaRenderedPages = async (buffer) => {
     has_images: true
   };
   try {
+    // Trích bảng đáp án từ lớp text trước khi OCR ảnh (nếu PDF có text layer)
+    const fullText = await tryExtractPdfText(buffer);
+    const answerKey = extractAnswerKeyFromPdfText(fullText);
+    const hasAnswerKey = Object.keys(answerKey).length >= 5;
+
     parser = new PDFParse({ data });
     const info = await parser.getInfo();
     const total = Math.min(info.total || 1, MAX_PDF_PAGES_RENDER_OCR);
@@ -833,6 +920,30 @@ const ocrPdfViaRenderedPages = async (buffer) => {
 
     await enrichOcrQuestionsWithMissingAnswers({ questions: merged, metadata });
 
+    // Áp dụng bảng đáp án (nếu trích được) — ghi đè đáp án AI suy luận
+    if (hasAnswerKey) {
+      let applied = 0;
+      merged.forEach((q, i) => {
+        const qNum = q.order_number ?? (i + 1);
+        const qType = normalizeQuestionType(q.question_type);
+        if (qType === 'trac_nghiem_1_dap_an' && answerKey[qNum]) {
+          const prev = q.correct_answer;
+          q.correct_answer = answerKey[qNum];
+          if (prev !== answerKey[qNum]) {
+            applied++;
+            // Ghi chú nếu AI đã suy luận sai
+            const note = '<p><em>[Đáp án lấy từ bảng đáp án cuối đề]</em></p>';
+            if (!q.explanation_html || q.explanation_html.includes('⚠️')) {
+              q.explanation_html = (q.explanation_html || '').replace(/<p><em>⚠️.*?<\/em><\/p>/g, '') + note;
+            }
+          }
+        }
+      });
+      if (applied > 0) {
+        console.log(`✅ Cập nhật đáp án từ bảng đáp án: ${applied} câu`);
+      }
+    }
+
     merged.forEach((q, i) => {
       q.order_number = i + 1;
     });
@@ -854,38 +965,14 @@ const isImageFile = (mimeType) => {
 };
 
 const ocrExamImage = async (fileBuffer, mimeType = 'image/png', meta = {}) => {
-  const useGeminiForImages = true;
+  // Gemini key có quota/xác thực lỗi — chỉ dùng Groq
+  const useGeminiForImages = false;
 
   try {
     if (mimeType === 'application/pdf') {
-      const txt = await tryExtractPdfText(fileBuffer);
-      if (txt.length >= MIN_PDF_TEXT_USE_TEXT_PATH) {
-        if (txt.length > MAX_PDF_TEXT_CHARS_SINGLE_GROQ_OCR) {
-          console.log(
-            `📄 PDF: text ${txt.length} ký tự > ${MAX_PDF_TEXT_CHARS_SINGLE_GROQ_OCR} — bỏ 1 request lớn, quét ảnh từng trang.`
-          );
-          return await ocrPdfViaRenderedPages(fileBuffer);
-        }
-        console.log(
-          `📄 PDF: dùng lớp text (${txt.length} ký tự, ngưỡng ${MIN_PDF_TEXT_USE_TEXT_PATH}) → Groq JSON`
-        );
-        try {
-          const responseText = await groqOcrExamFromExtractedText(txt);
-          return await parseOcrResponseWithRepair(responseText);
-        } catch (e) {
-          if (shouldFallbackPdfTextOcrToRenderedPages(e)) {
-            console.warn(
-              '📄 PDF (lớp text): lỗi kích thước/TPM/context — chuyển sang quét ảnh từng trang.',
-              e.message || e
-            );
-            return await ocrPdfViaRenderedPages(fileBuffer);
-          }
-          throw e;
-        }
-      }
-      console.log(
-        `📄 PDF: ít/không có lớp text (${txt.length} ký tự) → render ${MAX_PDF_PAGES_RENDER_OCR} trang tối đa + vision`
-      );
+      // Luôn dùng vision path cho PDF vật lý — text extraction làm hỏng công thức
+      // (ký hiệu hạt nhân, số mũ, ký hiệu vectơ bị strip bởi pdf-parse)
+      console.log(`📄 PDF → Groq Vision (render từng trang — bảo toàn công thức toán học)`);
       return await ocrPdfViaRenderedPages(fileBuffer);
     }
 
