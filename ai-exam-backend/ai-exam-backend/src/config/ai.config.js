@@ -43,10 +43,10 @@ const MODELS = {
     /** Model chậm hơn nhưng mạnh — dùng khi cần sửa JSON / tác vụ nặng */
     text: 'llama-3.3-70b-versatile',
     /**
-     * PDF/Word: trích text rồi gọi LLM — model nhỏ phản hồi nhanh hơn.
-     * Ghi đè bằng env GROQ_OCR_TEXT_MODEL nếu cần.
+     * PDF/Word: trích text rồi gọi LLM. Không cần biến môi trường — mặc định 70b (đủ hạn mức hơn 8b).
+     * Tùy chọn: GROQ_OCR_TEXT_MODEL nếu muốn model khác.
      */
-    textOcrFast: process.env.GROQ_OCR_TEXT_MODEL || 'llama-3.1-8b-instant'
+    textOcrFast: process.env.GROQ_OCR_TEXT_MODEL || 'llama-3.3-70b-versatile'
   }
 };
 

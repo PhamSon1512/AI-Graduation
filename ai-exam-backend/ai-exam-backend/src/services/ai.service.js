@@ -165,6 +165,74 @@ const PDF_PAGE_OCR_DELAY_MS = Math.max(
   0,
   parseInt(process.env.PDF_PAGE_OCR_DELAY_MS || '1200', 10)
 );
+/** Một request Groq OCR trên toàn bộ text PDF — vượt ngưỡng thì quét ảnh từng trang (nhiều request nhỏ hơn). */
+const MAX_PDF_TEXT_CHARS_SINGLE_GROQ_OCR = Math.max(
+  8000,
+  parseInt(process.env.MAX_PDF_TEXT_FOR_SINGLE_GROQ_OCR || '24000', 10)
+);
+/** Độ phóng to khi render PDF → PNG (càng thấp càng ít token ảnh; mặc định 1.0). */
+const PDF_PAGE_RENDER_SCALE = Math.min(
+  2,
+  Math.max(0.72, parseFloat(process.env.PDF_PAGE_RENDER_SCALE || '1') || 1)
+);
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isGroqRateOrQuotaError = (err) => {
+  if (!err) return false;
+  const status = err.status ?? err.response?.status;
+  let msg = String(err.message || '');
+  try {
+    const b = err.error ?? err.response?.data;
+    if (b && typeof b === 'object') msg += ` ${JSON.stringify(b)}`;
+    else if (typeof b === 'string') msg += ` ${b}`;
+  } catch (_) {
+    /* ignore */
+  }
+  if (status === 413 || status === 429) return true;
+  if (/rate_limit|too large|TPM|tokens per minute|Request too large/i.test(msg)) return true;
+  return false;
+};
+
+/** Lỗi text-OCR PDF nên chuyển sang quét ảnh từng trang (tránh 1 request quá lớn / TPM / context). */
+const shouldFallbackPdfTextOcrToRenderedPages = (err) => {
+  if (isGroqRateOrQuotaError(err)) return true;
+  const m = String(err?.message || err || '');
+  if (
+    /context length|maximum context|token limit|too many tokens|exceeds?.*token|max.*?tokens|payload too large|request too large/i.test(
+      m
+    )
+  ) {
+    return true;
+  }
+  return false;
+};
+
+/**
+ * Groq free tier hay gặp 413/429 TPM — chờ rồi thử lại.
+ */
+const groqChatCompletionsCreateWithRetry = async (groq, payload, { maxAttempts = 5 } = {}) => {
+  let lastErr;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      return await groq.chat.completions.create(payload);
+    } catch (e) {
+      lastErr = e;
+      const retryable = isGroqRateOrQuotaError(e);
+      if (!retryable || attempt === maxAttempts) {
+        throw e;
+      }
+      const waitMs = Math.min(90_000, 4000 * 2 ** (attempt - 1) + Math.floor(Math.random() * 2000));
+      console.warn(
+        `⚠️ Groq TPM/rate — chờ ${Math.round(waitMs / 1000)}s rồi thử lại (${attempt}/${maxAttempts}): ${e.message || e}`
+      );
+      // eslint-disable-next-line no-await-in-loop
+      await sleep(waitMs);
+    }
+  }
+  throw lastErr;
+};
 
 const extractTextFromPdf = async (buffer) => {
   let parser;
@@ -274,7 +342,7 @@ const ocrWithGemini = async (fileBuffer, mimeType) => {
 const repairOcrJsonWithGroq = async (brokenText) => {
   const groq = getGroqClient();
   const snippet = String(brokenText).slice(0, 120000);
-  const completion = await groq.chat.completions.create({
+  const completion = await groqChatCompletionsCreateWithRetry(groq, {
     model: MODELS.groq.text,
     messages: [
       {
@@ -358,16 +426,16 @@ const ocrWithGroq = async (fileBuffer, mimeType) => {
   let completion;
   if (isTextOnlyDoc) {
     try {
-      completion = await groq.chat.completions.create({
+      completion = await groqChatCompletionsCreateWithRetry(groq, {
         ...basePayload,
         response_format: { type: 'json_object' }
       });
     } catch (e) {
       console.warn('⚠️ Groq json_object không khả dụng, thử lại không ràng buộc:', e.message);
-      completion = await groq.chat.completions.create(basePayload);
+      completion = await groqChatCompletionsCreateWithRetry(groq, basePayload);
     }
   } else {
-    completion = await groq.chat.completions.create(basePayload);
+    completion = await groqChatCompletionsCreateWithRetry(groq, basePayload);
   }
 
   const content = completion?.choices?.[0]?.message?.content;
@@ -552,7 +620,7 @@ const enrichOcrQuestionsWithMissingAnswers = async (parsed) => {
   if (needGroq.length > 0) {
     try {
       const groq = getGroqClient();
-      const completion = await groq.chat.completions.create({
+      const completion = await groqChatCompletionsCreateWithRetry(groq, {
         model: MODELS.groq.text,
         messages: [
           {
@@ -647,13 +715,13 @@ const groqOcrExamFromExtractedText = async (examText) => {
   };
   let completion;
   try {
-    completion = await groq.chat.completions.create({
+    completion = await groqChatCompletionsCreateWithRetry(groq, {
       ...basePayload,
       response_format: { type: 'json_object' }
     });
   } catch (e) {
     console.warn('⚠️ Groq json_object không khả dụng, thử lại không ràng buộc:', e.message);
-    completion = await groq.chat.completions.create(basePayload);
+    completion = await groqChatCompletionsCreateWithRetry(groq, basePayload);
   }
   const content = completion?.choices?.[0]?.message?.content;
   if (!content || !String(content).trim()) {
@@ -679,12 +747,14 @@ const ocrPdfViaRenderedPages = async (buffer) => {
     parser = new PDFParse({ data });
     const info = await parser.getInfo();
     const total = Math.min(info.total || 1, MAX_PDF_PAGES_RENDER_OCR);
-    console.log(`📑 PDF (ảnh từng trang): ${total} trang, scale 1.25, delay ${PDF_PAGE_OCR_DELAY_MS}ms`);
+    console.log(
+      `📑 PDF (ảnh từng trang): ${total} trang, scale ${PDF_PAGE_RENDER_SCALE}, delay ${PDF_PAGE_OCR_DELAY_MS}ms`
+    );
 
     for (let page = 1; page <= total; page++) {
       const shot = await parser.getScreenshot({
         partial: [page],
-        scale: 1.25,
+        scale: PDF_PAGE_RENDER_SCALE,
         imageBuffer: true,
         imageDataUrl: false
       });
@@ -745,11 +815,28 @@ const ocrExamImage = async (fileBuffer, mimeType = 'image/png') => {
     if (mimeType === 'application/pdf') {
       const txt = await tryExtractPdfText(fileBuffer);
       if (txt.length >= MIN_PDF_TEXT_USE_TEXT_PATH) {
+        if (txt.length > MAX_PDF_TEXT_CHARS_SINGLE_GROQ_OCR) {
+          console.log(
+            `📄 PDF: text ${txt.length} ký tự > ${MAX_PDF_TEXT_CHARS_SINGLE_GROQ_OCR} — bỏ 1 request lớn, quét ảnh từng trang.`
+          );
+          return await ocrPdfViaRenderedPages(fileBuffer);
+        }
         console.log(
           `📄 PDF: dùng lớp text (${txt.length} ký tự, ngưỡng ${MIN_PDF_TEXT_USE_TEXT_PATH}) → Groq JSON`
         );
-        const responseText = await groqOcrExamFromExtractedText(txt);
-        return await parseOcrResponseWithRepair(responseText);
+        try {
+          const responseText = await groqOcrExamFromExtractedText(txt);
+          return await parseOcrResponseWithRepair(responseText);
+        } catch (e) {
+          if (shouldFallbackPdfTextOcrToRenderedPages(e)) {
+            console.warn(
+              '📄 PDF (lớp text): lỗi kích thước/TPM/context — chuyển sang quét ảnh từng trang.',
+              e.message || e
+            );
+            return await ocrPdfViaRenderedPages(fileBuffer);
+          }
+          throw e;
+        }
       }
       console.log(
         `📄 PDF: ít/không có lớp text (${txt.length} ký tự) → render ${MAX_PDF_PAGES_RENDER_OCR} trang tối đa + vision`
@@ -772,7 +859,7 @@ const ocrExamImage = async (fileBuffer, mimeType = 'image/png') => {
       console.log('🖼️ Image detected → Using Groq Vision...');
       responseText = await ocrWithGroq(fileBuffer, mimeType);
     } else {
-      console.log('📄 Word → Groq text (model:', MODELS.groq.textOcrFast + ')');
+      console.log('📄 Word → Groq text (model:', MODELS.groq.textOcrFast, ')');
       responseText = await ocrWithGroq(fileBuffer, mimeType);
     }
 
@@ -886,7 +973,7 @@ Trả về HTML format với các tag <p>, <strong>, <em> phù hợp.`;
 
     const groq = getGroqClient();
     console.log('📝 Using Groq for text generation (explanation)...');
-    const completion = await groq.chat.completions.create({
+    const completion = await groqChatCompletionsCreateWithRetry(groq, {
       model: MODELS.groq.text,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.3,
@@ -913,7 +1000,7 @@ Trả về JSON:
 
     console.log('📊 Using Groq for text analysis (difficulty)...');
     const groq = getGroqClient();
-    const completion = await groq.chat.completions.create({
+    const completion = await groqChatCompletionsCreateWithRetry(groq, {
       model: MODELS.groq.text,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.1,
