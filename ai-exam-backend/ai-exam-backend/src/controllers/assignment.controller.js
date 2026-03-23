@@ -226,16 +226,21 @@ const getAssignments = async (req, res) => {
         prisma.assignment.count({ where })
       ]);
 
-      const withAttempt = await Promise.all(
-        items.map(async (a) => {
-          const attempt = await prisma.assignmentAttempt.findUnique({
-            where: {
-              assignmentId_studentId: { assignmentId: a.id, studentId: user.id }
-            }
-          });
-          return { ...a, myAttempt: attempt };
-        })
-      );
+      const assignmentIds = items.map((a) => a.id);
+      const attempts =
+        assignmentIds.length > 0
+          ? await prisma.assignmentAttempt.findMany({
+              where: {
+                studentId: user.id,
+                assignmentId: { in: assignmentIds }
+              }
+            })
+          : [];
+      const attemptByAssignmentId = new Map(attempts.map((att) => [att.assignmentId, att]));
+      const withAttempt = items.map((a) => ({
+        ...a,
+        myAttempt: attemptByAssignmentId.get(a.id) ?? null
+      }));
 
       return res.json({
         status: 'success',

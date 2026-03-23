@@ -1,15 +1,6 @@
 const prisma = require('../config/prisma');
 const { Prisma } = require('@prisma/client');
 
-const shuffleArray = (array) => {
-  const arr = [...array];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-};
-
 // @desc    Bắt đầu luyện tập
 // @route   POST /api/practice/start
 // @access  Student
@@ -50,16 +41,39 @@ const startPractice = async (req, res) => {
       topicCode = topic.code;
     }
 
-    const where = {
-      subjectId: parseInt(subjectId),
-      status: 'approved'
-    };
-    if (topicCode) {
-      where.topic = topicCode;
+    const sid = parseInt(subjectId);
+    const takeCount = Math.min(parseInt(count) || 20, 50);
+
+    // Chỉ lấy đúng N id ngẫu nhiên từ DB — tránh load toàn bộ câu hỏi vào RAM
+    const idRows = topicCode
+      ? await prisma.$queryRaw`
+          SELECT id FROM questions
+          WHERE subject_id = ${sid}
+            AND status = 'approved'
+            AND topic = ${topicCode}
+          ORDER BY RANDOM()
+          LIMIT ${takeCount}
+        `
+      : await prisma.$queryRaw`
+          SELECT id FROM questions
+          WHERE subject_id = ${sid}
+            AND status = 'approved'
+          ORDER BY RANDOM()
+          LIMIT ${takeCount}
+        `;
+
+    const orderedIds = idRows.map((r) => r.id);
+    if (orderedIds.length === 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: topicCode
+          ? 'Không có câu hỏi nào cho môn học và chuyên đề này'
+          : 'Không có câu hỏi nào cho môn học này'
+      });
     }
 
-    const allQuestions = await prisma.question.findMany({
-      where,
+    const fetched = await prisma.question.findMany({
+      where: { id: { in: orderedIds } },
       select: {
         id: true,
         contentHtml: true,
@@ -72,19 +86,9 @@ const startPractice = async (req, res) => {
         imageDescription: true
       }
     });
-
-    if (allQuestions.length === 0) {
-      return res.status(400).json({
-        status: 'error',
-        message: topicCode
-          ? 'Không có câu hỏi nào cho môn học và chuyên đề này'
-          : 'Không có câu hỏi nào cho môn học này'
-      });
-    }
-
-    const shuffled = shuffleArray(allQuestions);
-    const takeCount = Math.min(parseInt(count) || 20, shuffled.length, 50);
-    const selected = shuffled.slice(0, takeCount);
+    const byId = new Map(fetched.map((q) => [q.id, q]));
+    const selected = orderedIds.map((id) => byId.get(id)).filter(Boolean);
+    const actualCount = selected.length;
 
     const session = await prisma.practiceSession.create({
       data: {
@@ -92,7 +96,7 @@ const startPractice = async (req, res) => {
         subjectId: parseInt(subjectId),
         topicId: topicId ? parseInt(topicId) : null,
         status: 'in_progress',
-        totalQuestions: takeCount,
+        totalQuestions: actualCount,
         questions: {
           create: selected.map((q, idx) => ({
             questionId: q.id,
@@ -113,7 +117,7 @@ const startPractice = async (req, res) => {
         sessionId: session.id,
         subject: session.subject,
         topic: session.topic,
-        totalQuestions: takeCount,
+        totalQuestions: actualCount,
         status: session.status
       }
     });

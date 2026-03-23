@@ -4,7 +4,13 @@ const prisma = require('../config/prisma');
 const { generateTokenPair, verifyRefreshToken } = require('../config/jwt');
 const { sendPasswordResetEmail, sendWelcomeEmail } = require('../services/email.service');
 
-const SALT_ROUNDS = 12;
+// 10–12: cân bằng CPU (đăng nhập/đăng ký) và độ khó brute-force. Override bằng BCRYPT_ROUNDS trong .env
+const SALT_ROUNDS = Math.min(
+  12,
+  Math.max(10, parseInt(process.env.BCRYPT_ROUNDS || '10', 10) || 10)
+);
+
+const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
 
 // @desc    Register new user
 // @route   POST /api/auth/register
@@ -12,8 +18,9 @@ const SALT_ROUNDS = 12;
 const register = async (req, res) => {
   try {
     const { email, password, fullName, role, className } = req.body;
+    const emailNorm = normalizeEmail(email);
 
-    if (!email || !password || !fullName || !role) {
+    if (!emailNorm || !password || !fullName || !role) {
       return res.status(400).json({
         status: 'error',
         message: 'Vui lòng điền đầy đủ thông tin: email, password, fullName, role'
@@ -42,7 +49,7 @@ const register = async (req, res) => {
     }
 
     const existingUser = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() }
+      where: { email: emailNorm }
     });
 
     if (existingUser) {
@@ -56,7 +63,7 @@ const register = async (req, res) => {
 
     const user = await prisma.user.create({
       data: {
-        email: email.toLowerCase(),
+        email: emailNorm,
         passwordHash,
         fullName,
         role,
@@ -90,6 +97,13 @@ const register = async (req, res) => {
       }
     });
   } catch (error) {
+    // Hai request đăng ký cùng email cùng lúc: cả hai đều qua findUnique, một create thành công → P2002
+    if (error.code === 'P2002' && error.meta?.modelName === 'User') {
+      return res.status(409).json({
+        status: 'error',
+        message: 'Email đã được sử dụng'
+      });
+    }
     console.error('Register error:', error);
     res.status(500).json({
       status: 'error',
@@ -113,7 +127,7 @@ const login = async (req, res) => {
     }
 
     const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() }
+      where: { email: normalizeEmail(email) }
     });
 
     if (!user) {
@@ -365,7 +379,7 @@ const forgotPassword = async (req, res) => {
     }
 
     const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() }
+      where: { email: normalizeEmail(email) }
     });
 
     if (!user) {
