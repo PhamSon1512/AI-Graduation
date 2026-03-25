@@ -33,6 +33,7 @@ const allowedOrigins = [
   'http://127.0.0.1:3000',
   'http://127.0.0.1:5173',
   'https://ai-graduation-fe.pages.dev',
+  'https://ai-exam-fe.sonpt1512.workers.dev',
   ...frontendUrls
 ].filter(Boolean);
 
