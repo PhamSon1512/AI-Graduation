@@ -1,9 +1,12 @@
 const express = require('express');
+const compression = require('compression');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./config/swagger');
+
+const isProd = process.env.NODE_ENV === 'production';
 
 // Import routes
 const authRoutes = require('./routes/auth.routes');
@@ -20,6 +23,8 @@ const assignmentRoutes = require('./routes/assignment.routes');
 const enrollmentRoutes = require('./routes/enrollment.routes');
 
 const app = express();
+app.disable('x-powered-by');
+app.set('trust proxy', 1);
 
 // CORS Configuration
 // FRONTEND_URL có thể là 1 URL hoặc nhiều URL cách nhau bởi dấu phẩy (vd: http://localhost:5173,https://fe-deploy.pages.dev)
@@ -60,9 +65,23 @@ app.use(helmet({
   contentSecurityPolicy: false, // Tắt CSP để Swagger UI hoạt động
   crossOriginEmbedderPolicy: false
 }));
-app.use(morgan('dev')); // Log request ra console
-app.use(express.json()); // Đọc body JSON từ request
-app.use(express.urlencoded({ extended: true }));
+app.use(
+  compression({
+    threshold: 1024,
+    filter: (req, res) => {
+      if (req.headers['x-no-compression']) return false;
+      return compression.filter(req, res);
+    }
+  })
+);
+if (isProd) {
+  app.use(morgan('tiny'));
+} else {
+  app.use(morgan('dev'));
+}
+const jsonLimit = process.env.JSON_BODY_LIMIT || '1mb';
+app.use(express.json({ limit: jsonLimit }));
+app.use(express.urlencoded({ extended: true, limit: jsonLimit }));
 
 // Swagger UI
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
