@@ -1,6 +1,6 @@
 const path = require('path');
 const prisma = require('../config/prisma');
-const { ocrExamImage, ocrMultipleFiles, generateExplanation, PHYSICS_12_TOPICS, BLOOM_LEVELS } = require('../services/ai.service');
+const { ocrExamImage, ocrMultipleFiles, generateExplanation, BLOOM_LEVELS } = require('../services/ai.service');
 const fs = require('fs');
 
 const normalizeExamUploadMime = (file) => {
@@ -80,8 +80,8 @@ const saveOcrQuestions = async (req, res) => {
         data: {
           contentHtml: q.content_html,
           options: q.options || null,
-          topic: q.topic || 'dao_dong_co',
-          subject: 'vat_ly_12',
+          topic: q.topic || 'general',
+          subjectId: parseInt(q.subjectId || 1),
           bloomLevel: BLOOM_LEVELS.includes(q.bloom_level) ? q.bloom_level : 'nhan_biet',
           correctAnswer: ['A', 'B', 'C', 'D'].includes(q.correct_answer) ? q.correct_answer : null,
           explanationHtml: q.explanation_html || null,
@@ -113,7 +113,7 @@ const saveOcrQuestions = async (req, res) => {
 // @access  Private (Teacher only)
 const createManualQuestion = async (req, res) => {
   try {
-    const { content_html, options, topic, bloom_level, correct_answer, explanation_html } = req.body;
+    const { content_html, options, topic, bloom_level, correct_answer, explanation_html, subjectId } = req.body;
 
     if (!content_html) {
       return res.status(400).json({
@@ -122,10 +122,17 @@ const createManualQuestion = async (req, res) => {
       });
     }
 
-    if (!topic || !PHYSICS_12_TOPICS.includes(topic)) {
+    if (!topic) {
       return res.status(400).json({
         status: 'error',
-        message: `Topic phải là một trong: ${PHYSICS_12_TOPICS.join(', ')}`
+        message: 'Topic không được để trống'
+      });
+    }
+
+    if (!subjectId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'subjectId không được để trống'
       });
     }
 
@@ -148,7 +155,7 @@ const createManualQuestion = async (req, res) => {
         contentHtml: content_html,
         options: options || null,
         topic,
-        subject: 'vat_ly_12',
+        subjectId: parseInt(subjectId),
         bloomLevel: bloom_level,
         correctAnswer: correct_answer || null,
         explanationHtml: explanation_html || null,
@@ -327,10 +334,10 @@ const updateQuestion = async (req, res) => {
     }
 
     if (topic !== undefined) {
-      if (!PHYSICS_12_TOPICS.includes(topic)) {
+      if (!topic) {
         return res.status(400).json({
           status: 'error',
-          message: `Topic phải là một trong: ${PHYSICS_12_TOPICS.join(', ')}`
+          message: `Topic không hợp lệ`
         });
       }
       updateData.topic = topic;

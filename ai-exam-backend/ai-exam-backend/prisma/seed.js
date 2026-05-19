@@ -87,6 +87,11 @@ const defaultSubjects = [
     code: 'ENG12',
     name: 'Tiếng Anh 12',
     description: 'Môn Tiếng Anh lớp 12 - Chương trình THPT'
+  },
+  {
+    code: 'INFO12',
+    name: 'Tin Học 12',
+    description: 'Môn Tin Học lớp 12 - Chương trình THPT'
   }
 ];
 
@@ -186,6 +191,33 @@ async function main() {
       });
     }
     console.log(`\n✅ Seed ${defaultTopics.length} topics cho Vật Lý 12`);
+  }
+
+  // Seed topics cho Tin Học 12
+  const infoSubject = await prisma.subject.findUnique({ where: { code: 'INFO12' } });
+  if (infoSubject) {
+    const defaultInfoTopics = [
+      { code: 'mang_may_tinh', name: 'Mạng máy tính', orderNumber: 1 },
+      { code: 'co_so_du_lieu', name: 'Cơ sở dữ liệu', orderNumber: 2 },
+      { code: 'he_quan_tri_csdl', name: 'Hệ quản trị CSDL', orderNumber: 3 },
+      { code: 'kien_truc_may_tinh', name: 'Kiến trúc máy tính', orderNumber: 4 },
+      { code: 'ai_tri_tue_nhan_tao', name: 'Trí tuệ nhân tạo', orderNumber: 5 }
+    ];
+    for (const t of defaultInfoTopics) {
+      await prisma.topic.upsert({
+        where: {
+          subjectId_code: { subjectId: infoSubject.id, code: t.code }
+        },
+        update: { name: t.name, orderNumber: t.orderNumber },
+        create: {
+          subjectId: infoSubject.id,
+          code: t.code,
+          name: t.name,
+          orderNumber: t.orderNumber
+        }
+      });
+    }
+    console.log(`\n✅ Seed ${defaultInfoTopics.length} topics cho Tin Học 12`);
   }
 
   console.log('\n🎉 Seed dữ liệu hoàn tất!');

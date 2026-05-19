@@ -22,16 +22,7 @@ if (GROQ_API_KEY && GROQ_API_KEY !== 'your_groq_api_key_here') {
   console.log('⚠️ GROQ_API_KEY:', GROQ_API_KEY ? 'Found but invalid' : 'Not found');
 }
 
-const PHYSICS_12_TOPICS = [
-  'dao_dong_co',
-  'song_co',
-  'dien_xoay_chieu',
-  'song_anh_sang',
-  'luong_tu_anh_sang',
-  'vat_ly_hat_nhan',
-  'nhiet_hoc',
-  'dien_tu_truong'
-];
+
 
 const BLOOM_LEVELS = ['nhan_biet', 'thong_hieu', 'van_dung', 'van_dung_cao'];
 
@@ -82,6 +73,6 @@ module.exports = {
   getGeminiModel,
   getGroqClient,
   MODELS,
-  PHYSICS_12_TOPICS,
+
   BLOOM_LEVELS
 };

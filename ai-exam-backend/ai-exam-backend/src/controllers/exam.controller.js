@@ -1,6 +1,6 @@
 const path = require('path');
 const prisma = require('../config/prisma');
-const { ocrExamImage, ocrMultipleFiles, PHYSICS_12_TOPICS, BLOOM_LEVELS } = require('../services/ai.service');
+const { ocrExamImage, ocrMultipleFiles, BLOOM_LEVELS } = require('../services/ai.service');
 const { parseExcelFile, generateTemplateExcel, getTemplateInfo } = require('../services/excel.service');
 const { QUESTION_TYPES, normalizeQuestionType } = require('../constants/questionTypes');
 const { uploadImage, isCloudinaryConfigured } = require('../config/cloudinary.config');
@@ -612,7 +612,10 @@ const ocrQuestionsForExam = async (req, res) => {
     }
 
     const exam = await prisma.exam.findUnique({
-      where: { id: parseInt(examId) }
+      where: { id: parseInt(examId) },
+      include: {
+        subject: true
+      }
     });
 
     if (!exam) {
@@ -638,13 +641,18 @@ const ocrQuestionsForExam = async (req, res) => {
 
     const filesNorm = files.map((f) => ({ ...f, mimetype: normalizeExamUploadMime(f) }));
 
+    const subjectName = exam.subject?.name || 'THPT';
+    const topicsArr = Array.isArray(exam.subject?.topics) ? exam.subject.topics.map(t => t.code || t) : [];
+    
     let ocrResult;
     if (filesNorm.length === 1) {
       ocrResult = await ocrExamImage(filesNorm[0].buffer, filesNorm[0].mimetype, {
-        originalName: filesNorm[0].originalname
+        originalName: filesNorm[0].originalname,
+        subjectName,
+        topics: topicsArr
       });
     } else {
-      ocrResult = await ocrMultipleFiles(filesNorm);
+      ocrResult = await ocrMultipleFiles(filesNorm, { subjectName, topics: topicsArr });
     }
 
     if (!ocrResult.questions || ocrResult.questions.length === 0) {

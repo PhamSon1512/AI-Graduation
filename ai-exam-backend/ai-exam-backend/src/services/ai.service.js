@@ -11,7 +11,9 @@ const { PDFParse } = require('pdf-parse');
 const mammoth = require('mammoth');
 const path = require('path');
 
-const OCR_EXAM_PROMPT = `Bạn là chuyên gia OCR đề thi. Hãy trích xuất TẤT CẢ câu hỏi từ nội dung này.
+const getOcrExamPrompt = (subjectName, topicsArr) => {
+  const topicsStr = topicsArr && topicsArr.length > 0 ? topicsArr.join(", ") : "general";
+  return `Bạn là chuyên gia OCR đề thi môn ${subjectName}. Hãy trích xuất TẤT CẢ câu hỏi từ nội dung này.
 
 NGUYÊN TẮC CHÍNH XÁC (ĐỌC TRƯỚC KHI LÀM):
 Copy CHÍNH XÁC nội dung câu hỏi từ đề — không tóm tắt, không bỏ bớt, không thay đổi từ ngữ hay số liệu. Mỗi con số, ký hiệu, công thức PHẢI giữ nguyên như bản gốc.
@@ -23,7 +25,7 @@ THỨ TỰ TÌM ĐÁP ÁN (ưu tiên cao → thấp):
 1. Bảng đáp án / Đáp án ở cuối đề (thường dạng bảng: Câu 1-D, Câu 2-A, ...) — LUÔN tìm trước
 2. Dấu hiệu trực quan: dấu ✓, ★, khoanh tròn, gạch chân, in đậm tại phương án đúng
 3. Ghi chú "Đáp án:", "Key:", "Đ/A:" cạnh từng câu
-4. CHỈ KHI không tìm thấy ở cả 3 nguồn trên → mới dùng kiến thức Vật lý 12 để suy luận, và GHI RÕ trong explanation_html: "⚠️ Đáp án suy luận — đề không in key."
+4. CHỈ KHI không tìm thấy ở cả 3 nguồn trên → mới dùng kiến thức ${subjectName} để suy luận, và GHI RÕ trong explanation_html: "⚠️ Đáp án suy luận — đề không in key."
 
 QUAN TRỌNG VỀ HÌNH ẢNH:
 - Nếu câu hỏi có hình ảnh (biển báo, sơ đồ, đồ thị, hình vẽ), hãy MÔ TẢ CHI TIẾT hình ảnh đó
@@ -48,7 +50,7 @@ SAO CHÉP ĐẦY ĐỦ NỘI DUNG:
 Với mỗi câu hỏi, nội dung content_html PHẢI bao gồm TOÀN BỘ đề bài — kể cả dữ kiện dài, bảng số liệu, đoạn mô tả tình huống. KHÔNG được tóm tắt. Nếu câu hỏi dài 10 dòng thì content_html cũng phải đủ 10 dòng.
 
 GIỮ NGUYÊN CÔNG THỨC — LATEX BẮT BUỘC:
-Mọi ký hiệu toán/vật lý PHẢI dùng LaTeX $...$. Tuyệt đối KHÔNG dùng Unicode superscript/subscript như ⁻¹ ⁻² ⁻³ ₁ ₂ ₃ α β ω φ.
+Mọi ký hiệu toán/${subjectName} PHẢI dùng LaTeX $...$. Tuyệt đối KHÔNG dùng Unicode superscript/subscript như ⁻¹ ⁻² ⁻³ ₁ ₂ ₃ α β ω φ.
 
 Các mẫu LaTeX quan trọng:
 - Hạt nhân: \${}_{Z}^{A}X$ — ví dụ \${}_{17}^{35}Cl$, \${}_{1}^{1}H$, \${}_{2}^{4}He$, \${}_{0}^{1}n$
@@ -58,7 +60,7 @@ Các mẫu LaTeX quan trọng:
 - Chỉ số dưới: $L_0$, $v_1$, $I_0$, $U_C$
 - Căn: $\\sqrt{2}$, $\\sqrt{LC}$
 - Góc: $60^\\circ$, $\\alpha = 30^\\circ$
-- Phân số vật lý: $\\frac{1}{2}mv^2$, $\\frac{Q}{t}$
+- Phân số ${subjectName}: $\\frac{1}{2}mv^2$, $\\frac{Q}{t}$
 
 VÍ DỤ content_html ĐÚNG:
 "Một đoạn dây dài $L=0{,}8$ m đặt trong từ trường, hợp với $\\vec{B}$ góc $\\alpha=60^\\circ$. Biết $I=20$ A, lực từ $F=2{,}0 \\times 10^{-2}$ N. Độ lớn cảm ứng từ $B$ là"
@@ -80,7 +82,7 @@ VÍ DỤ option ĐÚNG:
       "options": "Xem hướng dẫn từng loại bên dưới",
       "correct_answer": "Xem hướng dẫn từng loại bên dưới",
       "rounding_rule": "Chỉ dùng cho trac_nghiem_tra_loi_ngan: integer | 1_decimal | 2_decimals",
-      "topic": "một trong: ${PHYSICS_12_TOPICS.join(', ')}",
+      "topic": "một trong: ${topicsStr}",
       "bloom_level": "một trong: ${BLOOM_LEVELS.join(', ')}",
       "explanation_html": "Lời giải nếu có, null nếu không"
     }
@@ -89,7 +91,7 @@ VÍ DỤ option ĐÚNG:
     "total_questions": số_câu_hỏi,
     "exam_title": "tiêu đề đề thi nếu có",
     "has_images": true/false,
-    "subject": "Vật Lý 12"
+    "subject": "${subjectName}"
   }
 }
 
@@ -134,7 +136,7 @@ HƯỚNG DẪN TỪNG LOẠI CÂU HỎI:
 2. trac_nghiem_dung_sai (PHẦN II - Câu đúng sai):
    - Nhận dạng: Câu có 4 phát biểu a), b), c), d) — mỗi phát biểu cần xác định Đúng/Sai độc lập
    - LOẠI BỎ ngay ký hiệu bloom [B], (H), [VD]... khỏi nội dung phát biểu trước khi phân tích
-   - PHÂN TÍCH VẬT LÝ từng phát biểu: kiểm tra từng phát biểu bằng kiến thức Vật lý 12
+   - PHÂN TÍCH ${subjectName} từng phát biểu: kiểm tra từng phát biểu bằng kiến thức ${subjectName}
    - ⚠️ CẢNH BÁO: KHÔNG được trả về tất cả true — đề thi cố ý đặt 1–2 phát biểu sai!
    - Thống kê thực tế đề thi THPT: thường có 1–2 phát biểu đúng trong 4 (hoặc 2–3 đúng)
    - options: { "a": "nội dung phát biểu a (bỏ ký hiệu bloom)", "b": "...", "c": "...", "d": "..." }
@@ -151,7 +153,7 @@ HƯỚNG DẪN TỪNG LOẠI CÂU HỎI:
    - Nhận dạng: Câu hỏi yêu cầu tính toán và nhập một con số; thường có quy tắc làm tròn
    - options: null
    - correct_answer: PHẢI là một số dạng string (KHÔNG được null hay rỗng)
-   - Nếu đề không cho sẵn đáp án: PHẢI TỰ TÍNH từ dữ kiện bài → áp dụng công thức vật lý → ra số
+   - Nếu đề không cho sẵn đáp án: PHẢI TỰ TÍNH từ dữ kiện bài → áp dụng công thức ${subjectName} → ra số
    - Ví dụ: "Chu kỳ dao động LC với L=0,1H, C=100µF" → T = 2π√(LC) = 2π√(0,1×10⁻⁴) ≈ 0,0063 s → correct_answer = "0.0063"
    - rounding_rule: "integer" | "1_decimal" | "2_decimals" | "3_decimals" (dựa theo đơn vị và độ chính xác yêu cầu)
 
@@ -207,6 +209,7 @@ Kết quả:
   "options": null,
   "correct_answer": "Từ phương trình x = A.cos(ωt + φ), ta có: a = -ω²x. Vì ω² > 0 nên a và x luôn trái dấu, gia tốc luôn hướng về VTCB."
 }`;
+};
 
 /** Ghép vào cuối prompt khi gửi PDF/Word cho Groq — buộc chỉ trả JSON */
 const OCR_OUTPUT_JSON_ONLY = `
@@ -416,11 +419,11 @@ const ocrWithGemini = async (fileBuffer, mimeType, meta = {}) => {
 
   if (mimeType === 'application/pdf') {
     const text = await extractTextFromPdf(fileBuffer);
-    content = [OCR_EXAM_PROMPT + '\n\nNội dung đề thi:\n' + text];
+    content = [getOcrExamPrompt(meta.subjectName || "THPT", meta.topics) + '\n\nNội dung đề thi:\n' + text];
   } else if (mimeType === 'application/msword' ||
     mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
     const text = await extractTextFromWord(fileBuffer, meta.originalName || '');
-    content = [OCR_EXAM_PROMPT + '\n\nNội dung đề thi:\n' + text];
+    content = [getOcrExamPrompt(meta.subjectName || "THPT", meta.topics) + '\n\nNội dung đề thi:\n' + text];
   } else {
     const visionTail =
       '\n\n(Lưu ý khi đọc ảnh đề: mỗi câu trắc nghiệm A–D phải có correct_answer là "A","B","C" hoặc "D"; không để trống.)';
@@ -430,7 +433,7 @@ const ocrWithGemini = async (fileBuffer, mimeType, meta = {}) => {
         mimeType: mimeType
       }
     };
-    content = [OCR_EXAM_PROMPT + visionTail, imagePart];
+    content = [getOcrExamPrompt(meta.subjectName || "THPT", meta.topics) + visionTail, imagePart];
   }
 
   const result = await model.generateContent(content);
@@ -481,7 +484,7 @@ const ocrWithGroq = async (fileBuffer, mimeType, meta = {}) => {
       },
       {
         role: 'user',
-        content: OCR_EXAM_PROMPT + '\n\nNội dung đề thi:\n' + text + OCR_OUTPUT_JSON_ONLY
+        content: getOcrExamPrompt(meta.subjectName || "THPT", meta.topics) + '\n\nNội dung đề thi:\n' + text + OCR_OUTPUT_JSON_ONLY
       }
     ];
   } else {
@@ -490,7 +493,7 @@ const ocrWithGroq = async (fileBuffer, mimeType, meta = {}) => {
 
     const visionPromptTail = `
 
-=== YÊU CẦU KHI ĐỌC ẢNH ĐỀ THI VẬT LÝ ===
+=== YÊU CẦU KHI ĐỌC ẢNH ĐỀ THI MÔN ${meta.subjectName || "THPT"} ===
 
 LATEX BẮT BUỘC — MỌI CÔNG THỨC PHẢI DÙNG $...$:
 - Hạt nhân: \${}_{Z}^{A}X$ — ví dụ \${}_{17}^{35}Cl$, \${}_{1}^{1}H$, \${}_{2}^{4}He$, \${}_{0}^{1}n$
@@ -523,7 +526,7 @@ ${OCR_OUTPUT_JSON_ONLY}`;
         content: [
           {
             type: 'text',
-            text: OCR_EXAM_PROMPT + visionPromptTail
+            text: getOcrExamPrompt(meta.subjectName || "THPT", meta.topics) + visionPromptTail
           },
           {
             type: 'image_url',
@@ -653,7 +656,7 @@ const guessABCDFromQuestionBlob = (q) => {
   return null;
 };
 
-const parseOcrResponse = (text) => {
+const parseOcrResponse = (text, meta = {}) => {
   let parsed = extractJsonObjectFromAiText(text);
   if (!parsed) {
     console.error('OCR parse fail — raw head:', String(text).slice(0, 800));
@@ -663,7 +666,7 @@ const parseOcrResponse = (text) => {
   if (Array.isArray(parsed)) {
     parsed = {
       questions: parsed,
-      metadata: { total_questions: parsed.length, subject: 'Vật Lý 12' }
+      metadata: { total_questions: parsed.length, subject: meta.subjectName || "THPT" }
     };
   }
 
@@ -706,7 +709,7 @@ const parseOcrResponse = (text) => {
       return {
         ...q,
         order_number: index + 1,
-        topic: PHYSICS_12_TOPICS.includes(q.topic) ? q.topic : 'dao_dong_co',
+        topic: (meta.topics || []).includes(q.topic) ? q.topic : 'dao_dong_co',
         bloom_level: BLOOM_LEVELS.includes(q.bloom_level) ? q.bloom_level : 'nhan_biet',
         question_type: qType,
         correct_answer: correctAnswer,
@@ -723,7 +726,7 @@ const parseOcrResponse = (text) => {
 /**
  * Sau OCR: câu trắc nghiệm 1 đáp án vẫn thiếu A–D → Groq suy luận; nếu vẫn thiếu → gán A + ghi chú.
  */
-const enrichOcrQuestionsWithMissingAnswers = async (parsed) => {
+const enrichOcrQuestionsWithMissingAnswers = async (parsed, meta = {}) => {
   if (!parsed?.questions?.length) return;
 
   const needGroq = [];
@@ -752,8 +755,7 @@ const enrichOcrQuestionsWithMissingAnswers = async (parsed) => {
         messages: [
           {
             role: 'system',
-            content:
-              'Bạn là giáo viên Vật lý 12. Input là JSON mảng các object {i, content_html, options}. Mỗi câu là trắc nghiệm 4 phương án A-D nhưng thiếu đáp án. Trả về CHỈ một JSON: {"items":[{"i":number,"correct_answer":"A"|"B"|"C"|"D"}]}. Trường i phải khớp input. Chọn đáp án đúng theo vật lý. Bỏ qua ký hiệu [B] [H] [VD] (bloom level) trước từng phát biểu.'
+            content: `Bạn là giáo viên ${meta.subjectName || "THPT"}. Input là JSON mảng các object {i, content_html, options}. Mỗi câu là trắc nghiệm 4 phương án A-D nhưng thiếu đáp án. Trả về CHỈ một JSON: {"items":[{"i":number,"correct_answer":"A"|"B"|"C"|"D"}]}. Trường i phải khớp input. Chọn đáp án đúng theo môn học.`
           },
           { role: 'user', content: JSON.stringify(needGroq) }
         ],
@@ -834,11 +836,7 @@ const enrichOcrQuestionsWithMissingAnswers = async (parsed) => {
   if (allTrueDungSai.length > 0) {
     try {
       const groq = getGroqClient();
-      const systemMsg =
-        'Bạn là giáo viên Vật lý 12 chuyên phân tích câu hỏi Đúng/Sai (PHẦN II THPT). ' +
-        'Input là JSON mảng câu Đúng/Sai. Ký hiệu [B], [H], (H), [VD] trước phát biểu là bloom level, KHÔNG phải đáp án. ' +
-        'Phân tích từng phát biểu a,b,c,d bằng kiến thức vật lý. Thường 1-2 phát biểu sai, HIẾM KHI tất cả đều đúng. ' +
-        'Trả về JSON: {"items":[{"i":number,"correct_answer":{"a":bool,"b":bool,"c":bool,"d":bool},"reasoning":"lý do ngắn"}]}';
+      const systemMsg = `Bạn là giáo viên ${meta.subjectName || "THPT"} chuyên phân tích câu hỏi Đúng/Sai (PHẦN II THPT). Input là JSON mảng câu Đúng/Sai. Ký hiệu [B], [H], (H), [VD] trước phát biểu là bloom level, KHÔNG phải đáp án. Phân tích từng phát biểu a,b,c,d bằng kiến thức môn học. Thường 1-2 phát biểu sai, HIẾM KHI tất cả đều đúng. Trả về JSON: {"items":[{"i":number,"correct_answer":{"a":bool,"b":bool,"c":bool,"d":bool},"reasoning":"lý do ngắn"}]}`;
       const completion = await groqChatCompletionsCreateWithRetry(groq, {
         model: MODELS.groq.text,
         messages: [
@@ -905,9 +903,9 @@ const enrichOcrQuestionsWithMissingAnswers = async (parsed) => {
           {
             role: 'system',
             content:
-              'Bạn là giáo viên Vật lý 12. Input là JSON mảng câu trắc nghiệm trả lời ngắn (nhập số). ' +
-              'Tính toán từ dữ kiện và công thức vật lý để tìm số đáp án. ' +
-              'Trả về JSON: {"items":[{"i":number,"correct_answer":"số_đáp_án","rounding_rule":"integer|1_decimal|2_decimals"}]}'
+              `Bạn là giáo viên ${meta.subjectName || "THPT"}. Input là JSON mảng câu trắc nghiệm trả lời ngắn (nhập số). ` +
+              `Tính toán từ dữ kiện và công thức vật lý để tìm số đáp án. ` +
+              `Trả về JSON: {"items":[{"i":number,"correct_answer":"số_đáp_án","rounding_rule":"integer|1_decimal|2_decimals"}]}`
           },
           { role: 'user', content: JSON.stringify(missingShortAnswer) }
         ],
@@ -945,7 +943,7 @@ const parseOcrResponseWithRepair = async (responseText) => {
     const repaired = await repairOcrJsonWithGroq(responseText);
     parsed = parseOcrResponse(repaired);
   }
-  await enrichOcrQuestionsWithMissingAnswers(parsed);
+  await enrichOcrQuestionsWithMissingAnswers(parsed, meta);
   return parsed;
 };
 
@@ -960,7 +958,7 @@ const groqOcrExamFromExtractedText = async (examText) => {
     },
     {
       role: 'user',
-      content: OCR_EXAM_PROMPT + '\n\nNội dung đề thi:\n' + examText + OCR_OUTPUT_JSON_ONLY
+      content: getOcrExamPrompt(meta.subjectName || "THPT", meta.topics) + '\n\nNội dung đề thi:\n' + examText + OCR_OUTPUT_JSON_ONLY
     }
   ];
   const basePayload = {
@@ -1037,7 +1035,7 @@ const ocrPdfViaRenderedPages = async (buffer) => {
   let parser;
   const merged = [];
   const metadata = {
-    subject: 'Vật Lý 12',
+    subject: meta.subjectName || "THPT",
     pdf_rendered_pages: true,
     total_questions: 0,
     has_images: true
@@ -1264,7 +1262,7 @@ const ocrMultipleFiles = async (files) => {
 
 const generateExplanation = async (question, correctAnswer) => {
   try {
-    const prompt = `Bạn là giáo viên Vật Lý 12 giỏi. Hãy giải thích chi tiết câu hỏi sau:
+    const prompt = `Bạn là giáo viên ${meta.subjectName || "THPT"} giỏi. Hãy giải thích chi tiết câu hỏi sau:
 
 Câu hỏi: ${question.content_html}
 A. ${question.options?.A || ''}
@@ -1294,7 +1292,7 @@ Trả về HTML format với các tag <p>, <strong>, <em> phù hợp.`;
 
 const analyzeQuestionDifficulty = async (questionContent) => {
   try {
-    const prompt = `Phân tích câu hỏi Vật Lý 12 sau và xác định mức độ Bloom:
+    const prompt = `Phân tích câu hỏi ${meta.subjectName || "THPT"} sau và xác định mức độ Bloom:
 
 ${questionContent}
 

@@ -1,11 +1,16 @@
 const { Resend } = require('resend');
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const EMAIL_FROM = process.env.EMAIL_FROM || 'noreply@aigraduation.com';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
 const sendPasswordResetEmail = async (email, resetToken, fullName) => {
   const resetLink = `${FRONTEND_URL}/reset-password?token=${resetToken}`;
+
+  if (!resend) {
+    console.log(`[Mock Email] Password reset email for ${email}. Link: ${resetLink}`);
+    return { success: true, messageId: 'mock-id' };
+  }
 
   try {
     const { data, error } = await resend.emails.send({
@@ -93,6 +98,11 @@ const sendPasswordResetEmail = async (email, resetToken, fullName) => {
 };
 
 const sendWelcomeEmail = async (email, fullName) => {
+  if (!resend) {
+    console.log(`[Mock Email] Welcome email for ${email}`);
+    return { success: true, messageId: 'mock-id' };
+  }
+
   try {
     const { data, error } = await resend.emails.send({
       from: `AI Exam System <${EMAIL_FROM}>`,

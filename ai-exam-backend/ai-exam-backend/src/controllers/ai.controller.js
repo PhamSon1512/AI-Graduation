@@ -335,10 +335,7 @@ const getGenerationOptions = async (req, res) => {
           { value: 'tu_luan', label: 'Phần IV - Tự luận' },
           { value: 'trac_nghiem_nhieu_dap_an', label: 'Trắc nghiệm nhiều đáp án đúng' }
         ],
-        defaultTopics: [
-          'dao_dong_co', 'song_co', 'dien_xoay_chieu', 
-          'song_anh_sang', 'luong_tu_anh_sang', 'vat_ly_hat_nhan'
-        ]
+        defaultTopics: subjects.flatMap(s => (s.topics || []).map(t => t.code)).slice(0, 10)
       }
     });
   } catch (error) {

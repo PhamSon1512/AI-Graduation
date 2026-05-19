@@ -1,9 +1,9 @@
-const { getGroqClient, MODELS, BLOOM_LEVELS, PHYSICS_12_TOPICS } = require('../config/ai.config');
+const { getGroqClient, MODELS, BLOOM_LEVELS } = require('../config/ai.config');
 const prisma = require('../config/prisma');
 
 // ==================== PROMPTS ====================
 
-const EXPLAIN_QUESTION_PROMPT = `Bạn là gia sư Vật Lý 12 giỏi, nhiệt tình. Hãy giải thích câu hỏi sau cho học sinh hiểu.
+const EXPLAIN_QUESTION_PROMPT = `Bạn là gia sư giỏi, nhiệt tình. Hãy giải thích câu hỏi sau cho học sinh hiểu.
 
 Câu hỏi: {question}
 Các đáp án:
@@ -20,7 +20,7 @@ Yêu cầu:
 4. Sử dụng LaTeX cho công thức (ví dụ: $E = mc^2$)
 5. Trả về HTML format với các tag <p>, <strong>, <em>`;
 
-const STEP_SOLUTION_PROMPT = `Bạn là gia sư Vật Lý 12 giỏi. Hãy giải chi tiết TỪNG BƯỚC câu hỏi sau.
+const STEP_SOLUTION_PROMPT = `Bạn là gia sư giỏi. Hãy giải chi tiết TỪNG BƯỚC câu hỏi sau.
 
 Câu hỏi: {question}
 Các đáp án:
@@ -42,7 +42,7 @@ Ví dụ format:
   <p>Từ đề bài ta có...</p>
 </div>`;
 
-const GENERATE_QUESTION_PROMPT = `Bạn là chuyên gia soạn đề thi Vật Lý 12. Hãy tạo đúng {count} câu hỏi trắc nghiệm.
+const GENERATE_QUESTION_PROMPT = `Bạn là chuyên gia soạn đề thi môn {subject}. Hãy tạo đúng {count} câu hỏi trắc nghiệm.
 
 YÊU CẦU:
 - Môn học: {subject}
@@ -302,10 +302,12 @@ const analyzeExamRequest = async (teacherRequest, subjectId = null) => {
     .map(s => `Subject ${s.subjectId}: ${s.topic} - ${s.bloomLevel}: ${s._count} câu`)
     .join('\n');
 
+  const allTopics = subjects.flatMap(s => (s.topics || []).map(t => t.name)).join(', ');
+
   const prompt = ANALYZE_EXAM_REQUEST_PROMPT
     .replace('{teacherRequest}', teacherRequest)
     .replace('{availableSubjects}', subjects.map(s => `${s.id}: ${s.name}`).join(', '))
-    .replace('{availableTopics}', PHYSICS_12_TOPICS.join(', '))
+    .replace('{availableTopics}', allTopics)
     .replace('{questionBankStats}', statsString || 'Chưa có câu hỏi');
 
   const response = await callGroqChat(prompt, 3000);
@@ -382,7 +384,7 @@ const generateExam = async (teacherRequest, userId) => {
         });
 
         const prompt = GENERATE_NEW_QUESTIONS_PROMPT
-          .replace('{subject}', subject?.name || 'Vật Lý 12')
+          .replace('{subject}', subject?.name || 'THPT')
           .replace('{count}', remaining)
           .replace('{sampleQuestions}', sampleQuestions || 'Không có mẫu')
           .replace(/{topic}/g, examStructure.distribution?.by_topic ? Object.keys(examStructure.distribution.by_topic)[0] : 'general')
